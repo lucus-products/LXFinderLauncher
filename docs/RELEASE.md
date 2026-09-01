@@ -7,6 +7,42 @@
 > 读到 `downloadURL` 后跳转下载。所以发布需要维护两个「永远不变」的地址：
 > **JSON 的地址**（Gist Raw 链接）和 **下载包的地址**（GitHub latest 链接）。
 
+## 0. 发布原理一张图
+
+下图展示「发布者发布」与「用户检查更新」两个环节，如何通过 Gist 与 GitHub Releases 打通：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as 发布者（你）
+    participant Gist as Gist<br/>update.json 固定地址
+    participant GH as GitHub Releases<br/>latest 固定下载链接
+    participant App as 用户 App
+
+    rect rgb(238, 244, 255)
+        Note over Dev,GH: ① 发布环节（每次发版）
+        Dev->>Dev: 打包 dist-free/LXFinderLauncher.zip
+        Dev->>GH: gh release create v1.0.0（上传 zip）
+        Dev->>Gist: 更新 update.json（version + downloadURL）
+    end
+
+    rect rgb(238, 255, 238)
+        Note over Gist,App: ② 更新环节（App 内检查）
+        App->>Gist: 启动/点「检查更新」请求 feedURL
+        Gist-->>App: 返回 { version, downloadURL }
+        App->>App: isNewer（远程版本 > 当前）?
+        alt 有新版本
+            App->>GH: 打开固定 downloadURL
+            GH-->>App: 下载 LXFinderLauncher.zip
+        else 已是最新
+            App-->>App: 提示「已是最新」
+        end
+    end
+```
+
+> 核心：Gist 和下载链接都是**固定地址**。Gist 每次发版只改 `version`；下载链接用
+> `releases/latest/download/…` 永远指向最新一个 Release 里同名的 zip，所以 JSON 里的下载地址无需改动。
+
 ---
 
 ## 1. 先选一条发布路径（最重要，先决定）
@@ -82,6 +118,17 @@ dist-free/LXFinderLauncher.dmg   ← 拖拽安装的磁盘映像
 ---
 
 ## 3. 每次发版流程
+
+每次发版按下面的顺序走一遍（各步骤详见后文小节）：
+
+```mermaid
+flowchart TD
+    A["① 更新版本号<br/>Info.plist → 1.0.0"] --> B["② 构建打包<br/>./scripts/distribute-free.sh"]
+    B --> C["③ 产物 dist-free/<br/>LXFinderLauncher.zip"]
+    C --> D["④ 发布 Release<br/>gh release create v1.0.0 …"]
+    D --> E["⑤ 更新 Gist<br/>version → 1.0.0"]
+    E --> F["✅ 完成<br/>已装用户 App 内提示更新"]
+```
 
 ### 3.1 更新版本号
 
