@@ -143,6 +143,9 @@ GitHub 保证它永远指向「最新 Release 里名为 `LXFinderLauncher.zip` �
 
 ## 变更历史
 
+### V1.1.0 · 更新机制验证版
+- 版本号升级，用于验证「检查更新 → 提示新版 → 下载安装」的完整升级链路。
+
 ### V1.0.0 · 首个正式版
 - 纯菜单栏 App（`MenuBarExtra` + `LSUIElement`，无 Dock 图标）。
 - 全局快捷键：Carbon `RegisterEventHotKey`，默认 ⌘⇧T，设置页可录制自定义组合键。
