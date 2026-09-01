@@ -2,7 +2,7 @@
 
 ## 下载
 
-[⬇️ 下载最新版（v1.0.0）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+[⬇️ 下载最新版（v1.1.1）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
 
@@ -93,50 +93,6 @@ LXFinderLauncher/
 - **读取 Finder 目录用 osascript 子进程而非 NSAppleScript**——这是本项目最重要的一个坑，见下方变更历史 V1.0.0。
 - **打开终端/编辑器**：用 `NSWorkspace.open([dir], withApplicationAt:)`，不通过 Apple Events 控制目标应用，避免额外授权。
 - **开机自启**：`SMAppService.mainApp.register()`，需 App 位于 `/Applications`。
-
----
-
-## 发布更新（免费分发 · GitHub Releases + Gist）
-
-> 📄 完整发布手册（含签名公证路径、注意点、FAQ）：[docs/RELEASE.md](docs/RELEASE.md)
-
-更新机制：App 启动/手动「检查更新」时请求一个**固定的 JSON**（`UpdateChecker.feedURL`），
-读到 `downloadURL` 后跳转下载。因此需要两个「永远不变的地址」：JSON 的 URL 和下载包的 URL。
-
-### 首次配置（一次性）
-
-1. **建 GitHub 仓库**（如 `LXFinderLauncher`）——放 Releases。
-2. **建 Gist 放 update.json**：`github.com → Gist → New gist`，内容照抄 `docs/update.json.example`。
-3. **改代码**：把 `UpdateChecker.swift` 的 `feedURL` 换成你 Gist 的 Raw 链接：
-   ```
-   https://gist.githubusercontent.com/<用户名>/<gist-id>/raw/update.json
-   ```
-
-### 每次发版流程
-
-```bash
-# 1. 生成新的更新包
-./scripts/distribute-free.sh        # → dist-free/LXFinderLauncher.zip
-```
-2. **GitHub → 仓库 → Releases → Draft a new release**
-   - tag 填版本号：`v1.0.0`
-   - 附件上传 `dist-free/LXFinderLauncher.zip`（**文件名保持 LXFinderLauncher.zip 不变**）
-3. **编辑 Gist 的 update.json**：`version` 改成 `1.0.0`，`notes` 写本次更新内容。
-4. 完事。已装用户下次启动（或点「检查更新」）即提示新版本。
-
-### 为什么 downloadURL 不用每次改
-
-JSON 里的下载地址填的是 **固定「最新版」链接**：
-```
-https://github.com/<用户名>/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip
-```
-GitHub 保证它永远指向「最新 Release 里名为 `LXFinderLauncher.zip` 的文件」，
-所以每次发版只需上传同名 zip，JSON 不用动。
-
-### 国内访问慢怎么办
-
-- 下载链接套代理：`https://ghproxy.com/https://github.com/...`
-- 或改用国内对象存储（阿里云 OSS / 腾讯 COS），把 zip 和 update.json 放同一桶，两个 URL 依然固定。
 
 ---
 
