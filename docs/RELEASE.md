@@ -23,7 +23,7 @@ sequenceDiagram
         Note over Dev,GH: ① 发布环节（每次发版）
         Dev->>Dev: 打包 dist-free/LXFinderLauncher.zip
         Dev->>GH: gh release create v1.0.0（上传 zip）
-        Dev->>Gist: 更新 update.json（version + downloadURL）
+        Dev->>Gist: 更新 LXFinderLauncher-update-info.json<br/>（version + downloadURL）
     end
 
     rect rgb(238, 255, 238)
@@ -106,17 +106,18 @@ dist-free/LXFinderLauncher.dmg   ← 拖拽安装的磁盘映像
 3. 修改 `LXFinderLauncher/UpdateChecker.swift` 第 57 行的 `feedURL`，把占位符换成你的：
 
    ```swift
-   // 原来是：https://gist.githubusercontent.com/YOUR_USERNAME/GIST_ID/raw/update.json
-   static let feedURL = URL(string: "https://gist.githubusercontent.com/lucus-products/<你的gist-id>/raw/update.json")!
+   // 原来是：https://gist.githubusercontent.com/YOUR_USERNAME/GIST_ID/raw/LXFinderLauncher-update-info.json
+   static let feedURL = URL(string: "https://gist.githubusercontent.com/lucus-products/<你的gist-id>/raw/LXFinderLauncher-update-info.json")!
    ```
 
    > 也可以用 `gh gist create` 建 Gist。注意：**Gist 文件名取本地文件名，`--filename` 参数无效**，
-   > 所以要先用本地名为 `update.json` 的文件（Gist raw 链接才能命中 `/raw/update.json`）：
+   > 且要用带项目前缀的文件名（避免不同项目 Gist 同名）——Gist raw 链接才能命中
+   > `/raw/LXFinderLauncher-update-info.json`：
    >
    > ```bash
-   > cp docs/update.json.example update.json
-   > gh gist create update.json --public   # → 输出里带 Gist ID
-   > rm update.json
+   > cp docs/update.json.example LXFinderLauncher-update-info.json
+   > gh gist create LXFinderLauncher-update-info.json --public   # → 输出里带 Gist ID
+   > rm LXFinderLauncher-update-info.json
    > ```
 
 > ⚠️ **这是最容易漏的一步**：feedURL 没改，App 里「检查更新」永远连不上源，静默失败或永远显示"已是最新"。
