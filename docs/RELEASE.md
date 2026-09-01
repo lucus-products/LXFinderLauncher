@@ -110,7 +110,14 @@ dist-free/LXFinderLauncher.dmg   ← 拖拽安装的磁盘映像
    static let feedURL = URL(string: "https://gist.githubusercontent.com/lucus-products/<你的gist-id>/raw/update.json")!
    ```
 
-   > 也可以用 `gh gist create` 建 Gist：`gh gist create docs/update.json.example --public`，输出里带 Gist ID。
+   > 也可以用 `gh gist create` 建 Gist。注意：**Gist 文件名取本地文件名，`--filename` 参数无效**，
+   > 所以要先用本地名为 `update.json` 的文件（Gist raw 链接才能命中 `/raw/update.json`）：
+   >
+   > ```bash
+   > cp docs/update.json.example update.json
+   > gh gist create update.json --public   # → 输出里带 Gist ID
+   > rm update.json
+   > ```
 
 > ⚠️ **这是最容易漏的一步**：feedURL 没改，App 里「检查更新」永远连不上源，静默失败或永远显示"已是最新"。
 > 发布前务必确认 feedURL 不是 `YOUR_USERNAME`/`GIST_ID` 占位符。
