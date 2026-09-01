@@ -1,5 +1,11 @@
 # LXFinderLauncher
 
+## 下载
+
+[⬇️ 下载最新版（v1.0.0）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+
+> 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
+
 macOS 菜单栏工具：**在 Finder 当前窗口所在的目录，一键打开终端或编辑器**。灵感来自 [Go2Shell](https://itunes.apple.com/cn/app/go2shell/id445770608)，用 SwiftUI + AppKit 从零实现。
 
 ```
