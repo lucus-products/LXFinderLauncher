@@ -85,7 +85,7 @@ LXFinderLauncher/
 
 - **纯菜单栏 App**：`LSUIElement = YES`，无 Dock 图标；`MenuBarExtra` + `.menuBarExtraStyle(.menu)`。
 - **全局热键**：Carbon `RegisterEventHotKey`，无需任何 TCC 授权、系统级独占；`EventHotKeyRef` 必须强持有。
-- **读取 Finder 目录用 osascript 子进程而非 NSAppleScript**——这是本项目最重要的一个坑，见下方变更历史 V1.1。
+- **读取 Finder 目录用 osascript 子进程而非 NSAppleScript**——这是本项目最重要的一个坑，见下方变更历史 V1.0.0。
 - **打开终端/编辑器**：用 `NSWorkspace.open([dir], withApplicationAt:)`，不通过 Apple Events 控制目标应用，避免额外授权。
 - **开机自启**：`SMAppService.mainApp.register()`，需 App 位于 `/Applications`。
 
@@ -114,9 +114,9 @@ LXFinderLauncher/
 ./scripts/distribute-free.sh        # → dist-free/LXFinderLauncher.zip
 ```
 2. **GitHub → 仓库 → Releases → Draft a new release**
-   - tag 填版本号：`v1.1.0`
+   - tag 填版本号：`v1.0.0`
    - 附件上传 `dist-free/LXFinderLauncher.zip`（**文件名保持 LXFinderLauncher.zip 不变**）
-3. **编辑 Gist 的 update.json**：`version` 改成 `1.1.0`，`notes` 写本次更新内容。
+3. **编辑 Gist 的 update.json**：`version` 改成 `1.0.0`，`notes` 写本次更新内容。
 4. 完事。已装用户下次启动（或点「检查更新」）即提示新版本。
 
 ### 为什么 downloadURL 不用每次改
@@ -137,45 +137,20 @@ GitHub 保证它永远指向「最新 Release 里名为 `LXFinderLauncher.zip` �
 
 ## 变更历史
 
-### V1.0 · 初始版本
-- 菜单栏 App（`MenuBarExtra` + `LSUIElement` 纯菜单栏，无 Dock 图标）。
+### V1.0.0 · 首个正式版
+- 纯菜单栏 App（`MenuBarExtra` + `LSUIElement`，无 Dock 图标）。
 - 全局快捷键：Carbon `RegisterEventHotKey`，默认 ⌘⇧T，设置页可录制自定义组合键。
-- 在 Finder 当前目录打开 **Terminal**（`NSWorkspace.open`，无需额外授权）。
-- 复制当前目录路径 / 打开 Finder 目录。
-- 设置窗口：快捷键开关与录制、终端选择。
+- 在 Finder 当前目录打开 **Terminal / iTerm2 / 自定义终端**（`NSWorkspace.open`，无需额外授权），支持新窗口 / 新标签页。
+- **用 Cursor / VSCode / 自定义编辑器** 一键打开当前目录。
+- 菜单顶部实时显示 Finder 当前目录，一键复制路径 / 在 Finder 定位。
+- **开机自启**：`SMAppService.mainApp` 注册登录项，设置中开关。
+- **首次启动引导**：弹窗说明用法与授权。
+- **检查更新**：`URLSession` 请求静态 JSON（版本号 + 下载地址），免费分发无需签名即可自更新。
 - 独立工程：复制改造 Lucus-Finder 的 `project.pbxproj`（同步组结构 + `GENERATE_INFOPLIST_FILE` 合并自定义 `Info.plist`）。
 
-### V1.1 · 修复「路径一直是 Desktop」⭐⭐
-**现象**：打开的终端始终落在桌面，而非 Finder 当前目录。
-
-**根因**（两个问题叠加）：
-1. **LSUIElement 菜单栏 App 直接发 Apple Events 时，系统不弹 TCC 授权框、静默拒绝**，返回 `-1743`；
-2. AppleScript 脚本里 `on error` 把 `-1743` 吞掉，静默 fallback 桌面——既不报错也不 throw。
-
-**修复**：
-- 改用 **osascript 子进程**（`Process` 调 `/usr/bin/osascript`）发送 Apple Events，TCC 授权弹窗可正常显示，授权归因到本 App。
-- `-1743` 错误向上冒泡，弹窗引导用户去「自动化」授权。
-- 前窗获取失败时**枚举所有窗口**兜底。
-- 启动时**预检一次授权**，主动弹窗。
-- 接入 `os_log` 系统日志，便于 `log stream` 排查。
-
-### V2.0 · 扩展：iTerm2 + 开机自启
-- **iTerm2 支持**：设置中切换 Terminal / iTerm2（自动检测安装，未装则不显示）。
-- **开机自启**：`SMAppService.mainApp` 注册登录项，设置中开关。
-
-### V3.0 · 扩展：编辑器 / 新标签页 / 自定义终端 / 菜单路径 / 首次引导
-- **用 Cursor 打开**：菜单新增「用 Cursor 打开」，在 Finder 目录用 Cursor 打开；设置可配置 VSCode 或自定义编辑器。
-- **菜单显示当前路径**：菜单顶部实时显示 Finder 当前目录，每次展开刷新。
-- **新标签页打开**：设置中可选「当前窗口新建标签页」，用 osascript 控制 Terminal / iTerm2 在现有窗口加标签页。
-- **自定义终端**：支持 Warp / kitty 等任意 `.app` 路径（用通用 NSWorkspace 打开，不支持标签页）。
-- **首次启动引导**：弹窗说明用法与授权。
-- 抽象出 `OSAScriptRunner` 公共执行器（支持 argv 参数注入，避免路径拼接转义问题）。
-
-### V3.1 · 轻量更新检查
-- **检查更新**：菜单「检查更新…」+ 启动自动检查（设置中可关闭）。
-- 免费分发无法用 Sparkle（其强制要求签名 + 公证），改用 `URLSession` 请求一个**静态 JSON**（版本号 + 下载地址），无需服务器、无需签名。
-- 更新源：`UpdateChecker.feedURL`，发布前替换为自己托管的 JSON（GitHub Pages / Gist raw / 对象存储均可）。
-- 版本比较 `UpdateChecker.isNewer` 为纯函数，附带单元测试（含多段数字、`v` 前缀等边界）。
+> 关键技术：读取 Finder 当前目录用 **osascript 子进程**（`/usr/bin/osascript`）而非 `NSAppleScript`——
+> 菜单栏 App 直接发 Apple Events 会被 TCC 静默拒绝（返回 `-1743`），子进程方式才能正常弹出授权框并拿到目录。
+> 详见上文「技术要点」。
 
 ---
 

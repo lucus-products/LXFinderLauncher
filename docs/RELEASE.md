@@ -60,7 +60,7 @@ dist-free/LXFinderLauncher.dmg   ← 拖拽安装的磁盘映像
 
    ```json
    {
-     "version": "1.1.0",
+     "version": "1.0.0",
      "downloadURL": "https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip",
      "notes": "更新说明：……"
    }
@@ -118,15 +118,15 @@ gh auth login        # 选择 GitHub.com → HTTPS → 浏览器授权
 
 ```bash
 # 路径 A：传 zip
-gh release create v1.1.0 dist-free/LXFinderLauncher.zip \
+gh release create v1.0.0 dist-free/LXFinderLauncher.zip \
   --repo lucus-products/LXFinderLauncher \
-  --title "LXFinderLauncher v1.1.0" \
+  --title "LXFinderLauncher v1.0.0" \
   --notes "本次更新：……"
 
 # 路径 B：传 dmg
-gh release create v1.1.0 dist-release/LXFinderLauncher.dmg \
+gh release create v1.0.0 dist-release/LXFinderLauncher.dmg \
   --repo lucus-products/LXFinderLauncher \
-  --title "LXFinderLauncher v1.1.0" \
+  --title "LXFinderLauncher v1.0.0" \
   --notes "本次更新：……"
 ```
 
@@ -134,7 +134,7 @@ gh release create v1.1.0 dist-release/LXFinderLauncher.dmg \
 
 仓库页面 → 右侧 **Releases → Draft a new release**：
 
-1. Choose a tag → 输入 `v1.1.0` → Create new tag；
+1. Choose a tag → 输入 `v1.0.0` → Create new tag；
 2. 填 Title / Release notes；
 3. 把 `dist-free/LXFinderLauncher.zip`（或 `dist-release/LXFinderLauncher.dmg`）拖进 **Attach binaries**；
 4. Publish release。
@@ -145,7 +145,7 @@ gh release create v1.1.0 dist-release/LXFinderLauncher.dmg \
 ### 3.4 更新 Gist 的 update.json
 
 1. 打开你的 Gist → Edit；
-2. `version` 改成 `1.1.0`（与 tag 一致）；
+2. `version` 改成 `1.0.0`（与 tag 一致）；
 3. `notes` 写本次更新说明；
 4. Update public gist。
 
@@ -165,7 +165,7 @@ README.md 顶部加：
 ## 4. 发版后自检清单
 
 - [ ] 本机双击 `dist-free/LXFinderLauncher.app` 功能正常（先自测再发）；
-- [ ] 版本号三处一致：`Info.plist` / GitHub tag `v1.1.0` / Gist 的 `version`；
+- [ ] 版本号三处一致：`Info.plist` / GitHub tag `v1.0.0` / Gist 的 `version`；
 - [ ] `update.json` 的 downloadURL 里用户名是 `lucus-products`，Gist ID 已替换；
 - [ ] Release 附件文件名是 `LXFinderLauncher.zip`（没被浏览器改写成 `LXFinderLauncher(1).zip` 之类）；
 - [ ] 命令行验证下载可用：
@@ -181,7 +181,7 @@ README.md 顶部加：
 2. **zip 文件名被浏览器改写**。Chrome 下载带空格/中文名的附件可能加 `(1)`，务必传原名、保持名不变。
 3. **feedURL 占位符没改**。这是「检查更新」失效的头号原因，见 2.4。
 4. **Gist 不要设成 secret**。secret gist 的 raw 链接仍可访问，但换账号就失效，且不便协作，用 public。
-5. **版本号对不上**。tag 是 `v1.1.0`、JSON 是 `1.1.0`（不带 v）、Info.plist 三处必须同一数字，
+5. **版本号对不上**。tag 是 `v1.0.0`、JSON 是 `1.0.0`（不带 v）、Info.plist 三处必须同一数字，
    App 用 `isNewer` 比较，版本落后不会提示。
 6. **App 专用密码 ≠ 登录密码**（路径 B）。填错 notarytool 直接鉴权失败。
 7. **签名不是 Developer ID Application**（路径 B）。`release.sh` 会先校验，报错就回 Xcode 把 Team 切付费账号。
@@ -209,7 +209,7 @@ README.md 顶部加：
 不会。downloadURL 用的是 `releases/latest/download/…` 固定 latest 链接，只要每次上传同名 zip，永远指向最新版。
 
 **Q：用 gh 发版时报 "tag already exists"？**
-说明 tag 已存在（上次失败残留）。删掉重来：`git push origin :refs/tags/v1.1.0 && gh release delete v1.1.0 --yes`。
+说明 tag 已存在（上次失败残留）。删掉重来：`git push origin :refs/tags/v1.0.0 && gh release delete v1.0.0 --yes`。
 
 **Q：Xcode 工程改了代码，怎么出下一版？**
 重跑 3.2 构建脚本即可（脚本产物路径固定，覆盖旧文件）。版本号记得 +1 再发。
