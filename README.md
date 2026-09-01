@@ -35,7 +35,7 @@ Cursor / VSCode 一键打开该目录
 
 1. 构建并安装：
    ```bash
-   ./build.sh          # Debug 构建 → build/Build/Products/Debug/LXFinderLauncher.app
+   ./scripts/build.sh          # Debug 构建 → dist-build/Build/Products/Debug/LXFinderLauncher.app
    ```
    复制到 `~/Applications` 或 `/Applications`，双击运行。
 2. 首次运行：会弹出欢迎框 + 「控制 Finder」授权请求，**点允许**。
@@ -58,7 +58,10 @@ tccutil reset AppleEvents com.linx.LXFinderLauncher
 
 ```
 LXFinderLauncher/
-├── build.sh                    # 构建脚本（含命令解释）
+├── scripts/                     # 构建 / 分发 / 发布脚本
+│   ├── build.sh                 # 构建脚本（含命令解释）
+│   ├── distribute-free.sh       # 免费分发打包（路径 A，$0）
+│   └── release.sh               # 签名 + 公证 + 打 DMG（路径 B，$99/年）
 ├── LXFinderLauncher.xcodeproj    # Xcode 工程（PBXFileSystemSynchronizedRootGroup 同步组结构）
 └── LXFinderLauncher/             # 源码（文件放入即自动进 target）
     ├── LXFinderLauncherApp.swift   # @main：MenuBarExtra + Settings 场景
@@ -90,6 +93,8 @@ LXFinderLauncher/
 
 ## 发布更新（免费分发 · GitHub Releases + Gist）
 
+> 📄 完整发布手册（含签名公证路径、注意点、FAQ）：[docs/RELEASE.md](docs/RELEASE.md)
+
 更新机制：App 启动/手动「检查更新」时请求一个**固定的 JSON**（`UpdateChecker.feedURL`），
 读到 `downloadURL` 后跳转下载。因此需要两个「永远不变的地址」：JSON 的 URL 和下载包的 URL。
 
@@ -106,11 +111,11 @@ LXFinderLauncher/
 
 ```bash
 # 1. 生成新的更新包
-./distribute-free.sh        # → dist/LXFinderLauncher.zip
+./scripts/distribute-free.sh        # → dist-free/LXFinderLauncher.zip
 ```
 2. **GitHub → 仓库 → Releases → Draft a new release**
    - tag 填版本号：`v1.1.0`
-   - 附件上传 `dist/LXFinderLauncher.zip`（**文件名保持 LXFinderLauncher.zip 不变**）
+   - 附件上传 `dist-free/LXFinderLauncher.zip`（**文件名保持 LXFinderLauncher.zip 不变**）
 3. **编辑 Gist 的 update.json**：`version` 改成 `1.1.0`，`notes` 写本次更新内容。
 4. 完事。已装用户下次启动（或点「检查更新」）即提示新版本。
 
@@ -174,4 +179,4 @@ GitHub 保证它永远指向「最新 Release 里名为 `LXFinderLauncher.zip` �
 
 ---
 
-*构建：`./build.sh [Debug|Release]`。技术栈：Swift 6 / SwiftUI / AppKit / Carbon / osascript。*
+*构建：`./scripts/build.sh [Debug|Release]`。技术栈：Swift 6 / SwiftUI / AppKit / Carbon / osascript。*

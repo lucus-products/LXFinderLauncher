@@ -3,24 +3,27 @@
 # LXFinderLauncher 构建脚本
 #
 # 用法：
-#   ./build.sh            # 默认构建 Debug
-#   ./build.sh Release    # 构建 Release
+#   ./scripts/build.sh            # 默认构建 Debug
+#   ./scripts/build.sh Release    # 构建 Release
 #
 # 构建产物：
-#   build/Build/Products/<配置>/LXFinderLauncher.app
+#   dist-build/Build/Products/<配置>/LXFinderLauncher.app
 # ============================================================
 
 # set -e：脚本中任一命令返回非 0（失败），立即终止，避免带病继续。
 set -e
 
 # ------------------------------------------------------------
-# 定位工程目录
-#   dirname "$0"  → 脚本所在目录
+# 定位工程根目录
+#   脚本统一放在 scripts/ 下，工程根目录 = 脚本所在目录的上一级。
+#   dirname "$0"  → 脚本所在目录（scripts/）
+#   /..           → 上一级，即工程根目录
 #   cd ... pwd    → 转成绝对路径
-# 这样无论从哪个目录调用 ./build.sh，都能正确找到工程。
+# 这样无论从哪个目录调用 ./scripts/build.sh，都能正确找到工程，
+# 构建产物也稳定落在工程根目录的 dist-build/ 下。
 # ------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT="$SCRIPT_DIR/LXFinderLauncher.xcodeproj"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT="$PROJECT_ROOT/LXFinderLauncher.xcodeproj"
 SCHEME="LXFinderLauncher"
 
 # 构建配置：取第一个参数，缺省 Debug。
@@ -48,21 +51,21 @@ echo "🔨 开始构建 LXFinderLauncher（$CONFIG）..."
 #   -derivedDataPath <dir> 指定产物输出目录。
 #                          不用它时产物落在 Xcode 的 ~/Library/Developer/
 #                          Xcode/DerivedData/... 深层随机路径里；
-#                          指定后固定在本工程 build/ 下，路径稳定可预测。
+#                          指定后固定在本工程 dist-build/ 下，路径稳定可预测。
 #   build                  执行构建动作
 # ------------------------------------------------------------
 xcodebuild \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
-    -derivedDataPath "$SCRIPT_DIR/build" \
+    -derivedDataPath "$PROJECT_ROOT/dist-build" \
     build
 
 # ------------------------------------------------------------
 # 构建成功的产物 .app 一定在这里（derivedDataPath 已知，路径可算）：
-#   build/Build/Products/<Debug|Release>/LXFinderLauncher.app
+#   dist-build/Build/Products/<Debug|Release>/LXFinderLauncher.app
 # ------------------------------------------------------------
-APP_PATH="$SCRIPT_DIR/build/Build/Products/$CONFIG/LXFinderLauncher.app"
+APP_PATH="$PROJECT_ROOT/dist-build/Build/Products/$CONFIG/LXFinderLauncher.app"
 
 if [[ -d "$APP_PATH" ]]; then
     echo ""

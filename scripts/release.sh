@@ -21,18 +21,20 @@
 #                 注意：不是你的 Apple ID 登录密码。
 #
 # 用法：
-#   APPLE_ID=you@example.com TEAM_ID=ABCDE12345 APP_PASSWORD=xxxx-xxxx-xxxx-xxxx ./release.sh
+#   APPLE_ID=you@example.com TEAM_ID=ABCDE12345 APP_PASSWORD=xxxx-xxxx-xxxx-xxxx ./scripts/release.sh
 #
-# 产物：release/LXFinderLauncher.dmg（已签名 + 公证 + 装订）
+# 产物：dist-release/LXFinderLauncher.dmg（已签名 + 公证 + 装订）
 # ============================================================
 
 # 任一命令失败立即退出。
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT="$SCRIPT_DIR/LXFinderLauncher.xcodeproj"
+# 定位工程根目录：脚本统一放在 scripts/ 下，根目录 = 脚本上一级，
+# 构建产物稳定落在工程根目录的 dist-build/ 与 dist-release/ 下。
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT="$PROJECT_ROOT/LXFinderLauncher.xcodeproj"
 SCHEME="LXFinderLauncher"
-OUT="$SCRIPT_DIR/release"
+OUT="$PROJECT_ROOT/dist-release"
 
 # ------------------------------------------------------------
 # 0) 校验环境变量：:? 语法在变量为空时直接报错退出。
@@ -43,13 +45,13 @@ OUT="$SCRIPT_DIR/release"
 
 # ------------------------------------------------------------
 # 1) 构建 Release
-#    产物固定到 build/（与 distribute-free.sh 共用）。
+#    产物固定到 dist-build/（与 distribute-free.sh 共用）。
 # ------------------------------------------------------------
 echo "🔨 构建 Release ..."
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-           -derivedDataPath "$SCRIPT_DIR/build" build
+           -derivedDataPath "$PROJECT_ROOT/dist-build" build
 
-APP="$SCRIPT_DIR/build/Build/Products/Release/LXFinderLauncher.app"
+APP="$PROJECT_ROOT/dist-build/Build/Products/Release/LXFinderLauncher.app"
 if [[ ! -d "$APP" ]]; then
     echo "❌ 构建产物不存在：$APP"
     exit 1

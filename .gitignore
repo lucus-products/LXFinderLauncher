@@ -1,5 +1,5 @@
-build/
-dist/
-release/
+dist-build/
+dist-free/
+dist-release/
 xcuserdata/
 .DS_Store

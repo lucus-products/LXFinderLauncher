@@ -3,13 +3,13 @@
 # LXFinderLauncher 免费分发脚本（路径 A：无需 Apple Developer 账号，$0）
 #
 # 用法：
-#   ./distribute-free.sh            # 构建 Release 并打包
-#   ./distribute-free.sh Debug      # 仅自测用（见下方「为什么默认 Release」）
+#   ./scripts/distribute-free.sh            # 构建 Release 并打包
+#   ./scripts/distribute-free.sh Debug      # 仅自测用（见下方「为什么默认 Release」）
 #
 # 产物：
-#   dist/LXFinderLauncher.app   原始 App
-#   dist/LXFinderLauncher.zip   通用压缩包（推荐发给别人）
-#   dist/LXFinderLauncher.dmg   拖拽安装的磁盘映像
+#   dist-free/LXFinderLauncher.app   原始 App
+#   dist-free/LXFinderLauncher.zip   通用压缩包（推荐发给别人）
+#   dist-free/LXFinderLauncher.dmg   拖拽安装的磁盘映像
 #
 # 分发限制：
 #   未签名 Developer ID 的 App，别人首次运行会被 Gatekeeper 拦截。
@@ -21,12 +21,13 @@
 # 任一命令失败立即退出。
 set -e
 
-# 定位工程目录：从任何目录调用都能找到工程。
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT="$SCRIPT_DIR/LXFinderLauncher.xcodeproj"
+# 定位工程根目录：脚本统一放在 scripts/ 下，根目录 = 脚本上一级，
+# 构建产物稳定落在工程根目录的 dist-build/ 与 dist-free/ 下。
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT="$PROJECT_ROOT/LXFinderLauncher.xcodeproj"
 SCHEME="LXFinderLauncher"
 CONFIG="${1:-Release}"          # 默认 Release，可传 Debug
-DIST="$SCRIPT_DIR/dist"
+DIST="$PROJECT_ROOT/dist-free"
 
 # 只允许两种合法配置。
 if [[ "$CONFIG" != "Debug" && "$CONFIG" != "Release" ]]; then
@@ -44,20 +45,20 @@ fi
 
 # ------------------------------------------------------------
 # 1) 构建
-#    -derivedDataPath 固定产物到 build/，路径可预测。
+#    -derivedDataPath 固定产物到 dist-build/，路径可预测。
 # ------------------------------------------------------------
 echo "🔨 构建 $CONFIG ..."
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
-           -derivedDataPath "$SCRIPT_DIR/build" build >/dev/null
+           -derivedDataPath "$PROJECT_ROOT/dist-build" build >/dev/null
 
-APP_SRC="$SCRIPT_DIR/build/Build/Products/$CONFIG/LXFinderLauncher.app"
+APP_SRC="$PROJECT_ROOT/dist-build/Build/Products/$CONFIG/LXFinderLauncher.app"
 if [[ ! -d "$APP_SRC" ]]; then
     echo "❌ 构建产物不存在：$APP_SRC"
     exit 1
 fi
 
 # ------------------------------------------------------------
-# 2) 复制到干净的 dist/ 目录
+# 2) 复制到干净的 dist-free/ 目录
 # ------------------------------------------------------------
 rm -rf "$DIST"
 mkdir -p "$DIST"
@@ -80,7 +81,7 @@ echo ""
 echo "✅ 完成！产物目录：$DIST"
 echo "    LXFinderLauncher.app / .zip / .dmg"
 echo ""
-echo "本机双击 dist/LXFinderLauncher.app 即可运行（本机产物无隔离属性）。"
+echo "本机双击 dist-free/LXFinderLauncher.app 即可运行（本机产物无隔离属性）。"
 echo ""
 echo "⚠️  发给他人后首次运行会被 Gatekeeper 拦截（未签名 Developer ID）："
 echo "    方式一：右键 LXFinderLauncher.app → 打开（多一次确认）"
