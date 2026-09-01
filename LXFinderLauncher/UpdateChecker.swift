@@ -54,7 +54,7 @@ enum UpdateChecker {
     ///       https://github.com/<你的用户名>/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip
     /// 该链接永远指向「最新一个 Release 里名为 LXFinderLauncher.zip 的文件」，
     /// 因此每次发版上传同名 zip 即可，JSON 里的下载地址无需改动。
-    static let feedURL = URL(string: "https://gist.githubusercontent.com/YOUR_USERNAME/GIST_ID/raw/update.json")!
+    static let feedURL = URL(string: "https://gist.githubusercontent.com/lucus-linx/bb18c1f21a97eda4a7e7e8de69f25b12/raw/update.json")!
 
     /// 当前 App 版本号（工程 Info.plist 的 CFBundleShortVersionString）。
     static var currentVersion: String {
