@@ -80,7 +80,8 @@ git add -A && git commit -m "build: 发布 vX.Y.Z ..." && git push
 - [ ] `gh api repos/lucus-products/LXFinderLauncher/releases/latest --jq '.tag_name'` == `vX.Y.Z`
 - [ ] `gh release list --repo lucus-products/LXFinderLauncher` 最新一条是 vX.Y.Z
 - [ ] Gist `version` == `X.Y.Z`（步骤 5 已验证）
-- [ ] 下载链接可用：`curl -sIL -o /dev/null -w "%{http_code}" "https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip"` == `200`（偶发超时则重试，200 才算过）
+- [ ] 下载可用（最可靠）：`gh release download vX.Y.Z --repo lucus-products/LXFinderLauncher --pattern "LXFinderLauncher.zip" --dir /tmp/verify` 成功，且 `shasum -a 256` 与本地 `dist-free/LXFinderLauncher.zip` 一致。
+      注：`curl -sIL` 检查 latest 链接返回 **302 是 GitHub 正常重定向**（跳转到实际文件），不能据此判失败；用 `gh release download` 验证最可靠。
 
 ## 8. 收尾提醒
 
