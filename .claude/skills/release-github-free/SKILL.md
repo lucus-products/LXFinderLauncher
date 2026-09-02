@@ -1,9 +1,9 @@
 ---
-name: release
-description: 按标准化流程发布 LXFinderLauncher 新版本（改版本号 → 构建打包 → 发布 GitHub Release → 更新 Gist 更新源 → 推送代码）。适用于「发新版本」「发版」「发布 vX.Y.Z」「更新一版」等请求。
+name: release-github-free
+description: 按标准化流程以 GitHub Free 免费分发方式发布 LXFinderLauncher 新版本（改版本号 → 构建打包 → 发布 GitHub Release → 更新 Gist 更新源 → 推送代码）。适用于「发新版本」「发版」「发布 vX.Y.Z」「更新一版」等请求。
 ---
 
-# 发布 LXFinderLauncher 新版本（标准流程）
+# 发布 LXFinderLauncher 新版本（GitHub Free 免费分发）
 
 > 目标：一次走通发版全流程，**不遗漏任何步骤**。按 1→8 顺序执行，**每步完成并验证后再进入下一步**，不得跳步。
 
