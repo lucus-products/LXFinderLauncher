@@ -26,6 +26,7 @@ struct SettingsView: View {
 
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("autoCheckUpdates") private var autoCheckUpdates = true
+    @AppStorage("menuBarIconStyle") private var menuBarIconStyle = 0
 
     @State private var isITermInstalled = TerminalLauncherFactory.isITermInstalled()
     @State private var isCursorInstalled = EditorOpenerFactory.isCursorInstalled()
@@ -53,6 +54,16 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+
+            Section("菜单栏图标") {
+                Picker("图标", selection: $menuBarIconStyle) {
+                    Text("应用图标").tag(0)
+                    Text("终端图标").tag(1)
+                }
+                Text("菜单栏显示的图标；默认应用图标，可切换回终端图标。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("终端") {
