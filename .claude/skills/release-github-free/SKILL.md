@@ -54,17 +54,18 @@ gh release create vX.Y.Z dist-free/LXFinderLauncher.zip \
 - 附件文件名**必须保持 `LXFinderLauncher.zip` 不变**（latest 固定链接按文件名匹配，改名则 404）。
 - 验证：`gh release view vX.Y.Z --repo lucus-products/LXFinderLauncher` 输出含 `asset: LXFinderLauncher.zip`。
 
-## 5. 更新 Gist 更新源（version）
+## 5. 更新 Gist 更新源（version + notes）
 
-用 API 更新（**勿用 `gh gist edit`**，那会改文件名）：
+用 API 更新（**勿用 `gh gist edit`**，那会改文件名）。**content 必须同时带 `version` 和 `notes`（本次更新内容，与 Release notes 一致）**，缺 notes 时用户 App 内看不到更新说明：
 
 ```bash
 gh api gists/b7a192370a3b6ff689faa3a0c3325a8c -X PATCH \
-  -F 'files[LXFinderLauncher-update-info.json][content]={"version":"X.Y.Z","downloadURL":"https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip"}'
+  -F 'files[LXFinderLauncher-update-info.json][content]={"version":"X.Y.Z","downloadURL":"https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip","notes":"本次更新内容"}'
 ```
 
-- 验证：`gh api gists/b7a192370a3b6ff689faa3a0c3325a8c --jq '.files["LXFinderLauncher-update-info.json"].content | fromjson | .version'` == `X.Y.Z`。
+- 验证：`gh api gists/b7a192370a3b6ff689faa3a0c3325a8c --jq '.files["LXFinderLauncher-update-info.json"].content | fromjson | .version'` == `X.Y.Z`，且 `.notes` **非空**。
 - `downloadURL` **不要改**（latest 固定链接，永远指向最新版同名 zip）。
+- ⚠️ PATCH 是**整体覆盖** content，若遗漏 `notes` 会把它从 Gist 删掉（用户 App 里更新说明变空）。
 
 ## 6. 提交推送代码
 
