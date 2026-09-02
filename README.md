@@ -2,7 +2,7 @@
 
 ## 下载
 
-[⬇️ 下载最新版（v1.1.1）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+[⬇️ 下载最新版（v1.1.3）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
 
@@ -97,6 +97,9 @@ LXFinderLauncher/
 ---
 
 ## 变更历史
+
+### V1.1.3 · 更换应用图标
+- 应用图标替换为新设计（1024×1024 源图生成全尺寸，含透明背景）。
 
 ### V1.1.1 · 移除路径显示
 - 移除菜单顶部「当前路径」显示（路径获取异常、长路径拉伸菜单）。
