@@ -2,7 +2,7 @@
 
 ## 下载
 
-[⬇️ 下载最新版（v1.1.5）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+[⬇️ 下载最新版（v1.1.6）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
 
@@ -97,6 +97,12 @@ LXFinderLauncher/
 ---
 
 ## 变更历史
+
+### V1.1.6 · 终端打开方式优化与快捷键体验
+- 终端「打开位置」：选择「新窗口」时**总是新建独立窗口**（不再并入已有窗口成为标签页）。
+- 「新建标签页」改为智能行为：当前没有已打开的终端时新建窗口，已有窗口时在其新建标签页；选项文案与语义说明同步更新。
+- 修复 iTerm2 选择「新窗口」时窗口一闪即退的问题。
+- 快捷键：失败/错误弹窗不再被遮挡；设置页补充快捷键用途说明；组合键被占用（注册失败）时红字提示。
 
 ### V1.1.5 · 解决设置页面遮挡问题
 - 修复菜单栏点击「设置…」时，设置窗口落在其它窗口后面、被遮挡的问题（现在打开前会自动激活 App 并置顶窗口）。
