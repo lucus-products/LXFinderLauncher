@@ -151,6 +151,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // 捕获设置窗口引用，保证它总是显示在最前面（详见 SettingsOpener）。
+        .background(SettingsWindowCapture())
         .formStyle(.grouped)
         .frame(width: 400)
         .padding(20)
