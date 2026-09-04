@@ -32,6 +32,8 @@ struct SettingsView: View {
     @State private var isCursorInstalled = EditorOpenerFactory.isCursorInstalled()
     @State private var isVSCodeInstalled = EditorOpenerFactory.isVSCodeInstalled()
     @StateObject private var recorder = HotkeyRecorder()
+    /// 观察热键注册结果（共享单例，注册失败时显示红字提示）。
+    @ObservedObject private var hotkeyManager = HotkeyManager.shared
 
     var body: some View {
         Form {
@@ -53,7 +55,18 @@ struct SettingsView: View {
                             recorder.begin()
                         }
                     }
+
+                    if hotkeyManager.registerFailed {
+                        Label("注册失败：该组合键可能已被其它应用占用，请更换一个组合键。",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
+
+                Text("作用：在 Finder 当前窗口所在的目录打开终端（等同菜单「在此处打开终端」）。首次触发需在「系统设置 → 隐私与安全性 → 自动化」允许本 App 控制 Finder。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("菜单栏图标") {
@@ -87,11 +100,20 @@ struct SettingsView: View {
 
                 Picker("打开位置", selection: $terminalOpenMode) {
                     Text("新窗口").tag(0)
-                    Text("当前窗口新建标签页").tag(1)
+                    Text("新建标签页").tag(1)
                 }
 
-                if terminalOpenMode == 1 && terminalKind == 2 {
-                    Text("自定义终端暂不支持新建标签页，将始终使用新窗口。")
+                if terminalKind == 2 {
+                    if terminalOpenMode == 1 {
+                        Text("自定义终端暂不支持新建标签页，将始终使用新窗口。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    // 说明两种模式的语义，避免用户误以为「新建标签页」不会开新窗口。
+                    Text(terminalOpenMode == 0
+                         ? "总是新建一个终端窗口。"
+                         : "没有已打开的终端时新建窗口，已有窗口则在其中新建标签页。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

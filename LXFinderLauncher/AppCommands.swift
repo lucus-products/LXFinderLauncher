@@ -117,6 +117,9 @@ final class AppCommands {
     // MARK: - 错误呈现
 
     private func presentError(_ error: Error) {
+        // 必须先把本 App 激活，否则 accessory 菜单栏 App 的错误弹窗会落在其它窗口后面，
+        // 用户（尤其全局快捷键触发时）会以为“没有反应”。
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "LXFinderLauncher"

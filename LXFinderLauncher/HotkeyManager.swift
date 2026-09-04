@@ -7,6 +7,7 @@
 
 import AppKit
 import Carbon.HIToolbox
+import Combine
 
 /// 全局快捷键管理：基于 Carbon RegisterEventHotKey，系统级独占注册。
 ///
@@ -15,12 +16,15 @@ import Carbon.HIToolbox
 /// - C 回调不能捕获 self，通过 userData（Unmanaged）传入对象；
 /// - 回调在主线程 Carbon 事件循环触发，内部再派发到 MainActor。
 @MainActor
-final class HotkeyManager {
+final class HotkeyManager: ObservableObject {
 
     static let shared = HotkeyManager()
 
     /// 热键触发回调（统一转发到 AppCommands）。
     var onTrigger: (() -> Void)?
+
+    /// 最近一次注册结果，供设置页提示「组合键被占用 / 注册失败」。
+    @Published private(set) var registerFailed = false
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
@@ -58,7 +62,10 @@ final class HotkeyManager {
 
         var hotKeyID = EventHotKeyID(signature: Self.signature, id: id)
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, target, 0, &hotKeyRef)
-        return status == noErr
+        let ok = status == noErr
+        // 记录结果供设置页提示（失败通常是组合键被其它 App 占用）。
+        registerFailed = !ok
+        return ok
     }
 
     func unregister() {

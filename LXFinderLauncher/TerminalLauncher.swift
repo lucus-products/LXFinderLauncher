@@ -7,7 +7,9 @@
 
 import AppKit
 
-/// 终端打开位置：新窗口 / 当前窗口新建标签页。
+/// 终端打开位置：
+/// - newWindow：总是新建一个终端窗口；
+/// - newTab：当前没有已打开的终端时新建窗口，已有窗口时在窗口里新建标签页。
 enum TerminalOpenMode: Int {
     case newWindow = 0
     case newTab = 1
@@ -20,21 +22,39 @@ protocol TerminalLauncher {
 
 // MARK: - 系统 Terminal
 
-/// 系统 Terminal 实现：新窗口用 NSWorkspace，新标签页用 osascript 控制。
+/// 系统 Terminal 实现：新窗口 / 新建标签页都用 AppleScript 精确控制；
+/// 仅当 Terminal 未运行时交给 NSWorkspace（此时必然新开窗口，
+/// 也能避免 osascript 唤起时额外弹出一个默认窗口）。
 struct SystemTerminalLauncher: TerminalLauncher {
+
+    private static let bundleID = "com.apple.Terminal"
+
     func openTerminal(at directory: URL, mode: TerminalOpenMode) {
+        // 未运行 = 还没有任何 Terminal 窗口，两种模式都是新开一个目标目录的窗口。
+        if !Self.isRunning {
+            openInNewAppWindow(directory)
+            return
+        }
+
+        // 已运行：用 AppleScript 按模式精确开「新窗口」或「新建标签页」。
+        let script: String
         switch mode {
         case .newWindow:
-            let app = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            NSWorkspace.shared.open([directory], withApplicationAt: app,
-                                    configuration: config) { _, error in
-                if let error { print("[LXFinderLauncher] 打开终端失败：\(error)") }
-            }
+            // do script 不指定 in window，Terminal 会强制新建独立窗口。
+            // 不能再用 NSWorkspace.open 目录：Terminal 已运行时系统可能
+            // 把它并入已有窗口变成标签页。
+            script = """
+            on run argv
+                set thePath to item 1 of argv
+                tell application "Terminal"
+                    activate
+                    do script "cd " & quoted form of thePath
+                end tell
+            end run
+            """
         case .newTab:
-            // 在当前 Terminal 窗口新建标签页并 cd；无窗口则新建窗口。
-            let script = """
+            // 已有窗口则新建标签页；意外无窗口（进程保活）时兜底新建窗口。
+            script = """
             on run argv
                 set thePath to item 1 of argv
                 tell application "Terminal"
@@ -47,52 +67,113 @@ struct SystemTerminalLauncher: TerminalLauncher {
                 end tell
             end run
             """
-            do {
-                try OSAScriptRunner.run(script, arguments: [directory.path])
-            } catch {
-                print("[LXFinderLauncher] Terminal 新建标签页失败：\(error)")
-            }
+        }
+        run(script, directory: directory)
+    }
+
+    /// Terminal 是否已在运行（只查询，不触发启动）。
+    private static var isRunning: Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+    }
+
+    /// 未运行：让系统以「目录」为启动文档启动，启动即是一个干净的新窗口。
+    private func openInNewAppWindow(_ directory: URL) {
+        let app = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open([directory], withApplicationAt: app,
+                                configuration: config) { _, error in
+            if let error { print("[LXFinderLauncher] 打开 Terminal 失败：\(error)") }
+        }
+    }
+
+    private func run(_ script: String, directory: URL) {
+        do {
+            try OSAScriptRunner.run(script, arguments: [directory.path])
+        } catch {
+            print("[LXFinderLauncher] Terminal 控制失败：\(error)")
         }
     }
 }
 
 // MARK: - iTerm2
 
-/// iTerm2 实现：新窗口用 NSWorkspace，新标签页用 osascript 控制。
+/// iTerm2 实现：新窗口 / 新建标签页用 AppleScript 精确控制，未运行交给 NSWorkspace。
 struct ITermLauncher: TerminalLauncher {
+
+    private static let bundleID = "com.googlecode.iterm2"
+
     func openTerminal(at directory: URL, mode: TerminalOpenMode) {
+        guard let iterm = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.bundleID) else {
+            print("[LXFinderLauncher] 未检测到 iTerm2")
+            return
+        }
+        // 未运行 = 还没有任何 iTerm 窗口，两种模式都是新开一个目标目录的窗口。
+        if !Self.isRunning {
+            openInNewAppWindow(directory, app: iterm)
+            return
+        }
+
+        // 已运行：用 AppleScript 按模式精确开「新窗口」或「新建标签页」。
+        //
+        // 注意：不能写 `create window/tab with default profile command "cd …"`——
+        // iTerm 把 command 当一次性启动命令，cd 一执行完会话就结束、窗口一闪即关。
+        // 正确做法：先建一个默认的交互式会话窗口，再向它发送 cd 命令，shell 保持存活。
+        let script: String
         switch mode {
         case .newWindow:
-            guard let iterm = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.googlecode.iterm2") else {
-                print("[LXFinderLauncher] 未检测到 iTerm2")
-                return
-            }
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            NSWorkspace.shared.open([directory], withApplicationAt: iterm,
-                                    configuration: config) { _, error in
-                if let error { print("[LXFinderLauncher] 打开 iTerm2 失败：\(error)") }
-            }
+            // create window 强制新建独立窗口（不能靠 NSWorkspace.open，可能并入已有窗口）。
+            script = """
+            on run argv
+                set thePath to item 1 of argv
+                tell application "iTerm"
+                    activate
+                    set theWin to create window with default profile
+                    tell current session of theWin to write text "cd " & quoted form of thePath
+                end tell
+            end run
+            """
         case .newTab:
-            // 在当前 iTerm 窗口新建标签页并 cd；无窗口则新建窗口。
-            let script = """
+            // 已有窗口则新建标签页；意外无窗口（进程保活）时兜底新建窗口。
+            script = """
             on run argv
                 set thePath to item 1 of argv
                 tell application "iTerm"
                     activate
                     if (count of windows) is 0 then
-                        create window with default profile command "cd " & quoted form of thePath
+                        set theWin to create window with default profile
+                        tell current session of theWin to write text "cd " & quoted form of thePath
                     else
-                        tell current window to create tab with default profile command "cd " & quoted form of thePath
+                        tell current window to create tab with default profile
+                        tell current session of current window to write text "cd " & quoted form of thePath
                     end if
                 end tell
             end run
             """
-            do {
-                try OSAScriptRunner.run(script, arguments: [directory.path])
-            } catch {
-                print("[LXFinderLauncher] iTerm2 新建标签页失败：\(error)")
-            }
+        }
+        run(script, directory: directory)
+    }
+
+    /// iTerm2 是否已在运行（只查询，不触发启动）。
+    private static var isRunning: Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+    }
+
+    /// 未运行：让系统以「目录」为启动文档启动，启动即是一个干净的新窗口。
+    private func openInNewAppWindow(_ directory: URL, app: URL) {
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open([directory], withApplicationAt: app,
+                                configuration: config) { _, error in
+            if let error { print("[LXFinderLauncher] 打开 iTerm2 失败：\(error)") }
+        }
+    }
+
+    private func run(_ script: String, directory: URL) {
+        do {
+            try OSAScriptRunner.run(script, arguments: [directory.path])
+        } catch {
+            print("[LXFinderLauncher] iTerm2 控制失败：\(error)")
         }
     }
 }
