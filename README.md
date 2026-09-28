@@ -73,23 +73,31 @@ LXFinderLauncher/
 │   ├── distribute-free.sh       # 免费分发打包（路径 A，$0）
 │   └── release.sh               # 签名 + 公证 + 打 DMG（路径 B，$99/年）
 ├── LXFinderLauncher.xcodeproj    # Xcode 工程（PBXFileSystemSynchronizedRootGroup 同步组结构）
-└── LXFinderLauncher/             # 源码（文件放入即自动进 target）
-    ├── LXFinderLauncherApp.swift   # @main：MenuBarExtra + Settings 场景
-    ├── AppDelegate.swift         # 注册热键、启动授权预检、首次欢迎引导
-    ├── AppCommands.swift         # 所有动作唯一入口（打开终端/编辑器/复制/定位）
-    ├── FinderPathProvider.swift  # 读取 Finder 前窗目录（osascript 子进程）
-    ├── OSAScriptRunner.swift     # 公共 AppleScript 执行器（osascript 子进程）
-    ├── TerminalLauncher.swift    # 终端协议 + Terminal/iTerm2/自定义 实现 + 工厂
-    ├── EditorOpener.swift        # 编辑器协议 + Cursor/VSCode/自定义 实现 + 工厂
-    ├── FileTemplate.swift        # 创建文件：类型列表模型与 UserDefaults 读写
-    ├── FileCreator.swift         # 创建文件：文件名归一化、写盘、输入弹窗
+└── LXFinderLauncher/             # 源码（文件放入即自动进 target，子目录自动成为分组）
+    ├── App/                      # 入口与生命周期
+    │   ├── LXFinderLauncherApp.swift   # @main：MenuBarExtra + Settings 场景
+    │   ├── AppDelegate.swift           # 注册热键、启动授权预检、首次欢迎引导
+    │   ├── AppCommands.swift           # 所有动作唯一入口（终端/编辑器/复制/建文件/定位）
+    │   └── SettingsOpener.swift        # 打开设置窗口并保证置前（LSUIElement 的坑）
+    ├── Views/                    # 界面
+    │   ├── MenuContentView.swift       # 菜单栏菜单内容
+    │   └── SettingsView.swift          # 设置窗口（侧边栏 + 六个面板）
+    ├── Services/                 # 与外部系统打交道
+    │   ├── FinderPathProvider.swift    # 读取 Finder 前窗目录（osascript 子进程）
+    │   ├── OSAScriptRunner.swift       # 公共 AppleScript 执行器（osascript 子进程）
+    │   ├── TerminalLauncher.swift      # 终端协议 + Terminal/iTerm2/自定义 实现 + 工厂
+    │   ├── EditorOpener.swift          # 编辑器协议 + Cursor/VSCode/自定义 实现 + 工厂
+    │   └── UpdateChecker.swift         # 检查更新（读取更新源 JSON）
+    ├── FileCreation/             # 创建文件
+    │   ├── FileTemplate.swift          # 类型列表模型与 UserDefaults 读写
+    │   └── FileCreator.swift           # 文件名归一化、写盘、输入弹窗
+    ├── Hotkey/                   # 全局热键
+    │   ├── HotkeyManager.swift         # Carbon RegisterEventHotKey 多热键管理
+    │   ├── HotkeyRecorder.swift        # 设置页录制组合键
+    │   └── KeycodeTable.swift          # 键码 → 显示名映射（纯函数，可单测）
     ├── Templates/                # 空白 Office 模板（由 scripts/make-blank-templates.sh 生成）
-    ├── HotkeyManager.swift       # Carbon RegisterEventHotKey 全局热键
-    ├── HotkeyRecorder.swift      # 设置页录制组合键
-    ├── KeycodeTable.swift        # 键码 → 显示名映射（纯函数，可单测）
-    ├── MenuContentView.swift     # 菜单栏菜单内容
-    ├── SettingsView.swift        # 设置窗口
-    └── Info.plist                # LSUIElement + NSAppleEventsUsageDescription
+    ├── Assets.xcassets           # 应用图标与强调色
+    └── Info.plist                # LSUIElement + 三项 TCC 用途说明
 ```
 
 ---

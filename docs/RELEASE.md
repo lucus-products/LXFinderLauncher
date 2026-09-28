@@ -103,7 +103,7 @@ dist-free/LXFinderLauncher.dmg   ← 拖拽安装的磁盘映像
    ```
 
 2. 点击 **Create public gist**，复制浏览器地址里的 **Gist ID**（URL 末尾那串长哈希）；
-3. 修改 `LXFinderLauncher/UpdateChecker.swift` 第 57 行的 `feedURL`，把占位符换成你的：
+3. 修改 `LXFinderLauncher/Services/UpdateChecker.swift` 第 57 行的 `feedURL`，把占位符换成你的：
 
    ```swift
    // 原来是：https://gist.githubusercontent.com/YOUR_USERNAME/GIST_ID/raw/LXFinderLauncher-update-info.json
@@ -279,5 +279,5 @@ README.md 顶部加：
 | `release.sh` | 路径 B 签名+公证+装订+DMG 脚本（$99/年） |
 | `build.sh` | 纯构建脚本 |
 | `docs/update.json.example` | 更新源 JSON 模板 |
-| `LXFinderLauncher/UpdateChecker.swift` | App 内更新检查逻辑，`feedURL` 需改成本机 Gist |
+| `LXFinderLauncher/Services/UpdateChecker.swift` | App 内更新检查逻辑，`feedURL` 需改成本机 Gist |
 | `.gitignore` | 已忽略 `dist-build/` `dist-free/` 等产物目录 |

@@ -14,7 +14,7 @@ description: 按标准化流程以 GitHub Free 免费分发方式发布 LXFinder
 | Xcode 工程 | `LXFinderLauncher.xcodeproj`，版本号在 `project.pbxproj` 的 `MARKETING_VERSION`（**Debug + Release 两处**） |
 | 打包脚本 | `./scripts/distribute-free.sh` → 产物 `dist-free/LXFinderLauncher.{app,zip,dmg}` |
 | 更新源 Gist | `lucus-linx/b7a192370a3b6ff689faa3a0c3325a8c`，文件名 `LXFinderLauncher-update-info.json` |
-| App 内 feedURL | `LXFinderLauncher/UpdateChecker.swift` → 指向上述 Gist（一般无需改） |
+| App 内 feedURL | `LXFinderLauncher/Services/UpdateChecker.swift` → 指向上述 Gist（一般无需改） |
 | GitHub 仓库 | `lucus-products/LXFinderLauncher`（免费分发，未签名） |
 
 ## 1. 确定版本号
