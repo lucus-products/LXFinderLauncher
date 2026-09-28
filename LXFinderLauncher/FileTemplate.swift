@@ -56,6 +56,12 @@ enum FileTemplateStore {
     /// UserDefaults / @AppStorage 键。
     static let defaultsKey = "fileTemplates"
 
+    /// 「上次使用的文件类型」的扩展名。
+    ///
+    /// 存扩展名而不是类型的 id：类型列表本身是可编辑的，用户删掉再重加会换一个 id，
+    /// 而扩展名更耐用；`defaults read` 时也一眼看得懂。
+    static let lastUsedExtKey = "lastUsedFileTemplateExt"
+
     /// 内置默认列表，顺序即菜单顺序。
     ///
     /// 不含 `.doc` / `.xls` / `.ppt`：这几个是 OLE2 二进制格式，没法合成出最小可用的
@@ -111,8 +117,23 @@ enum FileTemplateStore {
     /// 拿去建文件会得到一个没有扩展名的文件，不该出现在菜单里。
     static func menuTemplates(from json: String) -> [FileTemplate] {
         templates(from: json)
-            .map(normalize)
+            // 写成闭包而不是 `.map(normalize)`：把 MainActor 隔离的方法当函数值传递会丢失
+            // 隔离信息（编译警告），闭包则在当前 actor 内求值，没有这个问题。
+            .map { normalize($0) }
             .filter { $0.enabled && !$0.ext.isEmpty }
+    }
+
+    /// 全局热键直建时该用哪个类型：优先「上次用过的扩展名」，否则取菜单里的第一个。
+    ///
+    /// 传进来的扩展名可能已经被用户删掉、禁用或改掉了，所以找不到就回退而不是失败。
+    /// 一个可用类型都没有才返回 nil（调用方据此提示用户去设置里加）。
+    static func quickCreateTemplate(from json: String, lastUsedExt: String) -> FileTemplate? {
+        let available = menuTemplates(from: json)
+        let wanted = normalizeExtension(lastUsedExt)
+        if !wanted.isEmpty, let matched = available.first(where: { $0.ext == wanted }) {
+            return matched
+        }
+        return available.first
     }
 
     /// 规范化一条类型：显示名去首尾空白；扩展名去空白、去首尾的点和转小写。

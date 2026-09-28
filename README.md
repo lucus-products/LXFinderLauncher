@@ -24,11 +24,12 @@ Cursor / VSCode 一键打开该目录
 
 | 功能 | 说明 |
 |---|---|
-| 菜单栏 + 全局快捷键 | 点击菜单栏图标，或按全局快捷键（默认 ⌘⇧T，可在设置中录制自定义） |
+| 菜单栏 + 全局快捷键 | 点击菜单栏图标，或按全局快捷键（打开终端默认 ⌘⇧T、创建文件默认 ⌃⌥⌘N，均可在设置中录制自定义） |
 | 多终端支持 | Terminal（系统）、iTerm2、自定义终端（任意 .app 路径） |
 | 新窗口 / 新标签页 | 可选在已有终端窗口**新建标签页**（而非新窗口） |
 | 用编辑器打开 | Cursor（默认）、VSCode、自定义编辑器一键打开当前目录 |
 | 创建文件 | 菜单栏「创建文件」二级菜单就地新建文件（md / txt / docx / xlsx / pptx / json / yml / html），类型、顺序可在设置中配置，也能新增自定义格式 |
+| 一键建文件 | 全局热键 **⌃⌥⌘N** 不弹窗直接建一个「未命名.<上次用的类型>」并在 Finder 中选中，可就地改名（同 Finder 的 ⌘⇧N 新建文件夹）；重名自动加序号，绝不覆盖 |
 | 复制路径 | 把当前目录完整 POSIX 路径复制到剪贴板 |
 | 打开 Finder 目录 | 在 Finder 新窗口定位当前目录 |
 | 开机自启 | 登录时自动启动（SMAppService） |
@@ -46,6 +47,7 @@ Cursor / VSCode 一键打开该目录
    复制到 `~/Applications` 或 `/Applications`，双击运行。
 2. 首次运行：会弹出欢迎框 + 「控制 Finder」授权请求，**点允许**。
 3. 在 Finder 打开任意目录，点菜单栏 **terminal 图标 →「在此处打开终端」**，或在任意 App 按 **⌘⇧T**。
+4. 想就地建文件：按 **⌃⌥⌘N** 直接生成「未命名.<上次用的类型>」并在 Finder 中选中，敲名字回车即改名；想一上来就指定名字和类型，走菜单栏 **「创建文件 → 某个类型」**。
 
 ### 授权说明（重要）
 
@@ -94,7 +96,11 @@ LXFinderLauncher/
 ## 技术要点
 
 - **纯菜单栏 App**：`LSUIElement = YES`，无 Dock 图标；`MenuBarExtra` + `.menuBarExtraStyle(.menu)`。
-- **全局热键**：Carbon `RegisterEventHotKey`，无需任何 TCC 授权、系统级独占；`EventHotKeyRef` 必须强持有。
+- **全局热键**：Carbon `RegisterEventHotKey`，无需任何 TCC 授权，也是免授权方案里唯一能「吞掉」按键的（`NSEvent` 全局监听只能旁观会双触发、`CGEventTap` 要辅助功能权限）。支持多个热键，靠 `EventHotKeyID.id` 分发。
+  - **它不是系统级独占**：跨进程重复注册不会失败、两边都收到通知，「注册成功」≠「别的 App 收不到」。真正会失败的是同进程内两个热键撞同一组合（`eventHotKeyExistsErr`）与系统保留组合键，所以设置页把「与另一个热键重复」和「注册失败」分开提示。
+  - Carbon 回调返回 `eventNotHandledErr` 才是「放行」——返回任何其它值都会终止事件传递。所以处理器必须校验 `EventHotKeyID.signature`，不是自己的一律放行，否则会吞掉同一 target 上 AppKit/SwiftUI 内部注册的热键事件。
+  - 创建文件用 ⌃⌥⌘N 而**不是** ⌥⌘N：后者是 Finder 的「新建智能文件夹」，而 Finder 恰好是这个功能唯一的使用场景。
+  - `@AppStorage` 只把默认值放在自己的属性包装器里、**不写进 UserDefaults**，而 `HotkeyManager` 直接读 UserDefaults——所以启动时必须先 `GlobalHotkey.registerDefaults()`，否则默认热键注册不上（`bool` 读到 false），且 `integer` 读到 `0` 会去劫持字母 A。
 - **读取 Finder 目录用 osascript 子进程而非 NSAppleScript**——这是本项目最重要的一个坑，见下方变更历史 V1.0.0。
 - **打开终端/编辑器**：用 `NSWorkspace.open([dir], withApplicationAt:)`，不通过 Apple Events 控制目标应用，避免额外授权。
 - **创建文件的空白 Office 模板**：docx/xlsx/pptx 是 OOXML（zip 包），0 字节的空文件会被 Word/Excel/PowerPoint 判为「文件已损坏」。所以随包带三个最小可用的空白文档（`Templates/`），创建时直接拷贝；纯文本类格式空文件即合法，走 0 字节分支。模板由 `scripts/make-blank-templates.sh` 生成，不要手工改 `Templates/` 里的文件。

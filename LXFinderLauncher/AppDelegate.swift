@@ -13,11 +13,19 @@ private let logger = Logger(subsystem: "com.linx.LXFinderLauncher", category: "A
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 全局热键触发 → 打开终端。
-        HotkeyManager.shared.onTrigger = {
-            AppCommands.shared.openTerminalHere()
+        // 必须先注册默认值：@AppStorage 不把默认值写进 UserDefaults，而 HotkeyManager 直接读
+        // UserDefaults——键不存在时 bool 读到 false（默认热键根本注册不上）、integer 读到 0
+        // （0 是 kVK_ANSI_A，会全局劫持字母 A）。详见 GlobalHotkey.registerDefaults。
+        GlobalHotkey.registerDefaults()
+
+        // 全局热键触发 → 按热键分派。
+        HotkeyManager.shared.onTrigger = { hotkey in
+            switch hotkey {
+            case .openTerminal: AppCommands.shared.openTerminalHere()
+            case .createFile:   AppCommands.shared.createFileQuickly()
+            }
         }
-        // 按 UserDefaults 配置注册热键。
+        // 按 UserDefaults 配置注册全部热键。
         HotkeyManager.shared.applySettings()
         logger.debug("热键注册完成")
 
@@ -54,12 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.alertStyle = .informational
             alert.messageText = "欢迎使用 LXFinderLauncher"
             alert.informativeText = """
-            在 Finder 当前目录打开终端或编辑器：
-            · 点菜单栏 terminal 图标，或按全局快捷键（默认 ⌘⇧T）
+            在 Finder 当前目录打开终端或新建文件：
+            · 点菜单栏 terminal 图标，或按全局快捷键（打开终端默认 ⌘⇧T、创建文件默认 ⌃⌥⌘N）
             · 首次使用会请求「控制 Finder」的授权，点允许即可。
 
             设置里可切换终端（Terminal / iTerm2 / 自定义）、
-            配置用 Cursor 等编辑器打开、开启开机自启。
+            配置用 Cursor 等编辑器打开、增删「创建文件」的类型、开启开机自启。
             """
             alert.addButton(withTitle: "开始使用")
             alert.runModal()
@@ -67,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        HotkeyManager.shared.unregister()
+        // Carbon 在进程退出时本会自行清理（头文件明说不必注销），这里只是显式收尾。
+        HotkeyManager.shared.unregisterAll()
     }
 }

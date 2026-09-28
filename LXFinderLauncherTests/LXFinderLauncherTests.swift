@@ -233,4 +233,122 @@ struct FileCreatorTests {
         // 覆盖是「先删再建」，旧内容必须没了——不然就成了静默保留旧文件。
         #expect(try Data(contentsOf: url).isEmpty)
     }
+
+    @Test func createsUntitledFile() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let url = try FileCreator.createUntitled(
+            template: FileTemplate(name: "Markdown", ext: "md"), in: dir)
+
+        #expect(url.lastPathComponent == "未命名.md")
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func createUntitledNeverOverwritesExistingFile() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let template = FileTemplate(name: "Markdown", ext: "md")
+        let first = try FileCreator.createUntitled(template: template, in: dir)
+        try Data("别动我".utf8).write(to: first)
+
+        let second = try FileCreator.createUntitled(template: template, in: dir)
+
+        #expect(second.lastPathComponent == "未命名 2.md")
+        // 关键：无弹窗直建没有任何确认机会，绝不能覆盖已有文件。
+        #expect(try Data(contentsOf: first) == Data("别动我".utf8))
+    }
+
+    @Test func createUntitledNormalizesExtension() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let url = try FileCreator.createUntitled(
+            template: FileTemplate(name: "X", ext: ".MD"), in: dir)
+
+        #expect(url.lastPathComponent == "未命名.md")
+    }
+}
+
+// MARK: - 全局热键
+
+struct GlobalHotkeyTests {
+
+    @Test func keyPrefixesAreDistinct() {
+        // 前缀撞车会让两个热键共用同一套 UserDefaults 键，改一个等于改另一个。
+        let prefixes = GlobalHotkey.allCases.map(\.keyPrefix)
+        #expect(Set(prefixes).count == prefixes.count)
+    }
+
+    @Test func defaultCombosAreDistinct() {
+        // 出厂默认值若撞车，开箱就会有一个热键注册失败。
+        let combos = GlobalHotkey.allCases.map {
+            KeyCombo(keyCode: $0.defaultKeyCode, modifiers: $0.defaultModifiers)
+        }
+        #expect(Set(combos).count == combos.count)
+    }
+
+    @Test func createFileDefaultDoesNotStealFinderNewSmartFolder() {
+        // ⌥⌘N 是 Finder 的「新建智能文件夹」，而 Finder 正是这个功能唯一的使用场景：
+        // 要么让用户用不了 Finder 的新建智能文件夹，要么恰好在 Finder 前台时热键不触发。
+        // 所以默认值必须比它多一个 ⌃。
+        let createFile = GlobalHotkey.createFile
+        #expect(createFile.defaultModifiers & cmdKey != 0)
+        #expect(createFile.defaultModifiers & controlKey != 0)
+        #expect(createFile.defaultModifiers & optionKey != 0)
+    }
+
+    @Test func openTerminalKeepsLegacyKeyPrefix() {
+        // 老用户已经录好的组合键存在 "hotkey*" 这套键里，前缀改了等于配置丢失。
+        #expect(GlobalHotkey.openTerminal.keyPrefix == "hotkey")
+    }
+
+    @Test func optionOnlyDetection() {
+        #expect(GlobalHotkey.isOptionOnly(modifiers: optionKey))
+        #expect(GlobalHotkey.isOptionOnly(modifiers: optionKey | shiftKey))
+        // 只含 ⇧ 不算「只含 ⌥」——那条失效报告针对的是 ⌥。
+        #expect(!GlobalHotkey.isOptionOnly(modifiers: shiftKey))
+        #expect(!GlobalHotkey.isOptionOnly(modifiers: optionKey | cmdKey))
+        // 用户当前用的 ⌥Space 正落在这个可疑区间里。
+        #expect(GlobalHotkey.isOptionOnly(modifiers: optionKey | 0))
+    }
+}
+
+// MARK: - 热键直建选哪个类型
+
+struct QuickCreateTemplateTests {
+
+    /// 一份「Markdown 可用 / Excel 被禁用 / JSON 可用 / 草稿未填扩展名」的列表。
+    private let json = FileTemplateStore.encode([
+        FileTemplate(name: "Markdown", ext: "md"),
+        FileTemplate(name: "Excel", ext: "xlsx", enabled: false),
+        FileTemplate(name: "JSON", ext: "json"),
+        FileTemplate(name: "草稿", ext: ""),
+    ])
+
+    @Test func prefersLastUsedExtension() {
+        #expect(FileTemplateStore.quickCreateTemplate(from: json, lastUsedExt: "json")?.ext == "json")
+    }
+
+    @Test func normalizesLastUsedExtension() {
+        #expect(FileTemplateStore.quickCreateTemplate(from: json, lastUsedExt: " .JSON ")?.ext == "json")
+    }
+
+    @Test func fallsBackToFirstEnabled() {
+        // 从没记录过、或上次用的类型已被删掉 → 回退菜单里的第一个可用项。
+        #expect(FileTemplateStore.quickCreateTemplate(from: json, lastUsedExt: "toml")?.ext == "md")
+        #expect(FileTemplateStore.quickCreateTemplate(from: json, lastUsedExt: "")?.ext == "md")
+    }
+
+    @Test func skipsDisabledAndEmptyExtension() {
+        // 被禁用的 xlsx 与没填扩展名的草稿都不该被选中。
+        #expect(FileTemplateStore.quickCreateTemplate(from: json, lastUsedExt: "xlsx")?.ext == "md")
+    }
+
+    @Test func returnsNilWhenNothingAvailable() {
+        let allDisabled = FileTemplateStore.encode([FileTemplate(name: "X", ext: "x", enabled: false)])
+        #expect(FileTemplateStore.quickCreateTemplate(from: allDisabled, lastUsedExt: "x") == nil)
+        #expect(FileTemplateStore.quickCreateTemplate(from: "[]", lastUsedExt: "") == nil)
+    }
 }

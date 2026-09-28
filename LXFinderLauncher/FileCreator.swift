@@ -115,8 +115,10 @@ enum FileCreator {
                 try FileManager.default.removeItem(at: url)
             }
 
+            // 扩展名先归一化再查模板：用户在设置里可能填成 ".MD" / " MD "，
+            // 而 bundle 里的资源名是固定的小写 blank.docx。
             if let blank = Bundle.main.url(forResource: blankTemplateName,
-                                           withExtension: template.ext) {
+                                           withExtension: FileTemplateStore.normalizeExtension(template.ext)) {
                 try FileManager.default.copyItem(at: blank, to: url)
             } else {
                 // 用会抛错的写盘 API，而不是只返回 Bool 的 createFile(atPath:contents:)——
@@ -144,6 +146,16 @@ enum FileCreator {
     }
 
     // MARK: 交互流程
+
+    /// 建一个「未命名.<扩展名>」文件，重名自动加序号。
+    ///
+    /// 给全局热键的「无弹窗直建」用。整个过程没有任何确认机会，所以**绝不能覆盖**：
+    /// `availableDefaultName` 负责避开已存在的名字，`create` 的 `overwrite: false` 再兜底。
+    static func createUntitled(template: FileTemplate, in directory: URL) throws -> URL {
+        let ext = FileTemplateStore.normalizeExtension(template.ext)
+        let name = availableDefaultName(ext: ext, in: directory)
+        return try create(named: name, template: template, in: directory)
+    }
 
     /// 问文件名 → 建文件 → 在 Finder 中选中。返回 nil 表示用户取消（不算错误）。
     ///

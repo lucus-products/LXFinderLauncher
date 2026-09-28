@@ -70,11 +70,6 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 /// ——它是 list 样式的属性，不依赖 `NavigationSplitView`。手写能拿到一样的观感。
 struct SettingsView: View {
 
-    @AppStorage("hotkeyEnabled") private var hotkeyEnabled = true
-    /// 存 Int（AppStorage 不支持 UInt32），使用时转 UInt32。
-    @AppStorage("hotkeyKeyCode") private var hotkeyKeyCode = Int(kVK_ANSI_T)
-    @AppStorage("hotkeyModifiers") private var hotkeyModifiers = Int(cmdKey | shiftKey)
-
     @AppStorage("terminalKind") private var terminalKind = 0
     @AppStorage("customTerminalPath") private var customTerminalPath = ""
     @AppStorage("terminalOpenMode") private var terminalOpenMode = 0
@@ -121,7 +116,8 @@ struct SettingsView: View {
     /// 如果它归某个面板所有，用户正录着快捷键切走面板就会把监听器变成孤儿
     /// （详见 HotkeyRecorder.cancel 的说明）。
     @StateObject private var recorder = HotkeyRecorder()
-    /// 观察热键注册结果（共享单例，注册失败时显示红字提示）。
+    /// 观察热键注册结果（共享单例，逐行显示失败/撞车提示）。
+    /// 必须用 @ObservedObject 而不是直接访问 `HotkeyManager.shared`，否则 status 变化不会刷新界面。
     @ObservedObject private var hotkeyManager = HotkeyManager.shared
 
     var body: some View {
@@ -150,10 +146,11 @@ struct SettingsView: View {
             // 装载类型列表，并把「当前值」记成已同步，避免刚打开就被当成用户改动写回去。
             templates = FileTemplateStore.templates(from: fileTemplatesJSON)
             lastSyncedTemplatesJSON = FileTemplateStore.encode(
-                templates.map(FileTemplateStore.normalize))
-            recorder.onRecorded = { keyCode, modifiers in
-                hotkeyKeyCode = Int(keyCode)
-                hotkeyModifiers = Int(modifiers)
+                templates.map { FileTemplateStore.normalize($0) })
+            recorder.onRecorded = { hotkey, keyCode, modifiers in
+                // GlobalHotkey 的 setter 是 nonmutating 的，直接写 UserDefaults。
+                hotkey.keyCode = Int(keyCode)
+                hotkey.modifiers = Int(modifiers)
                 HotkeyManager.shared.applySettings()
             }
         }
@@ -234,36 +231,76 @@ struct SettingsView: View {
     private var shortcutsPane: some View {
         pane {
             Section("全局快捷键") {
-                Toggle("启用全局快捷键", isOn: $hotkeyEnabled)
-                    .onChange(of: hotkeyEnabled) { _, _ in
-                        HotkeyManager.shared.applySettings()
-                    }
-
-                if hotkeyEnabled {
+                // 每个热键一行：勾选 + 名称 + 录制按钮。两行共用一个 recorder，
+                // 靠 recordingTarget 判断当前在录哪个。
+                ForEach(GlobalHotkey.allCases) { hotkey in
                     HStack {
-                        Text("快捷键")
+                        Toggle("", isOn: enabledBinding(hotkey))
+                            .labelsHidden()
+                            .toggleStyle(.checkbox)
+
+                        Text(hotkey.title)
                         Spacer()
-                        Button(recorder.isRecording
+
+                        Button(recorder.recordingTarget == hotkey
                                ? "请按下组合键…"
                                : KeycodeTable.displayString(
-                                   keyCode: UInt32(hotkeyKeyCode),
-                                   modifiers: UInt32(hotkeyModifiers))) {
-                            recorder.begin()
+                                   keyCode: UInt32(hotkey.keyCode),
+                                   modifiers: UInt32(hotkey.modifiers))) {
+                            recorder.begin(hotkey)
                         }
+                        // 已经有一个在录时，只允许操作正在录的那一个。
+                        .disabled(recorder.recordingTarget != nil && recorder.recordingTarget != hotkey)
                     }
 
-                    if hotkeyManager.registerFailed {
-                        Label("注册失败：该组合键可能已被其它应用占用，请更换一个组合键。",
-                              systemImage: "exclamationmark.triangle.fill")
+                    if let message = statusMessage(hotkeyManager.status(of: hotkey)) {
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
+
+                    // 只提示、不拦截：有报告称 macOS 15 上「只含 ⌥」的全局热键会整体失效
+                    // （FB15168205），但不足以据此改掉用户能用的配置。
+                    if hotkey.isOptionOnly {
+                        Text("只含 ⌥ 的组合在 macOS 15 上有失效报告，若热键无响应建议换一个。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
-                Text("作用：在 Finder 当前窗口所在的目录打开终端（等同菜单「在此处打开终端」）。首次触发需在「系统设置 → 隐私与安全性 → 自动化」允许本 App 控制 Finder。")
+                Text("「打开终端」在 Finder 当前窗口所在目录打开终端。\n「创建文件」不弹窗，直接建一个「未命名」文件并在 Finder 中选中它，可就地改名；类型取你上次用过的那个，可在「创建文件」面板里配置。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// 用 `GlobalHotkey` 自己读写 UserDefaults 来构造开关绑定。
+    ///
+    /// 不能像别处那样用 `@AppStorage`：`ForEach` 里没法按变量拼出属性包装器的键。
+    /// 开关一改就立刻重新注册；`HotkeyManager.status` 是 @Published，会带动这一行刷新，
+    /// 所以绑定的 get 会重新读到新值。
+    private func enabledBinding(_ hotkey: GlobalHotkey) -> Binding<Bool> {
+        Binding(
+            get: { hotkey.isEnabled },
+            set: { newValue in
+                hotkey.isEnabled = newValue
+                HotkeyManager.shared.applySettings()
+            }
+        )
+    }
+
+    /// 注册结果的提示文案；一切正常（或用户主动关闭）时返回 nil。
+    private func statusMessage(_ status: GlobalHotkeyStatus) -> String? {
+        switch status {
+        case .ok, .disabled:
+            return nil
+        case .duplicate(let other):
+            // 必须与「被其它应用占用」区分开：同进程撞车是唯一必然注册失败的情形，
+            // 说成「被其它应用占用」会把用户引去换组合键，而真正要改的是另一个热键。
+            return "与「\(other.title)」的快捷键重复，请重新录制。"
+        case .failed:
+            return "注册失败：该组合键可能被系统保留，或已被某个独占注册的 App 占用。"
         }
     }
 
@@ -471,7 +508,7 @@ struct SettingsView: View {
     /// 不拦住的话「只是打开了一下设置页」就会把当前默认列表固化进 UserDefaults，
     /// 以后版本新增的默认类型对老用户就再也看不到了。
     private func scheduleSaveTemplates(_ newValue: [FileTemplate]) {
-        let json = FileTemplateStore.encode(newValue.map(FileTemplateStore.normalize))
+        let json = FileTemplateStore.encode(newValue.map { FileTemplateStore.normalize($0) })
         guard json != lastSyncedTemplatesJSON else { return }
 
         templatesSaveTask?.cancel()
@@ -490,7 +527,7 @@ struct SettingsView: View {
         templatesSaveTask?.cancel()
         templatesSaveTask = nil
 
-        let json = FileTemplateStore.encode(templates.map(FileTemplateStore.normalize))
+        let json = FileTemplateStore.encode(templates.map { FileTemplateStore.normalize($0) })
         guard json != lastSyncedTemplatesJSON else { return }
         commitTemplates(json)
     }

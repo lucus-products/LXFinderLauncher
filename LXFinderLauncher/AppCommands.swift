@@ -59,11 +59,46 @@ final class AppCommands {
             guard let url = try FileCreator.promptAndCreate(template: template, in: directory) else {
                 return   // 用户取消，不是错误
             }
+            recordLastUsedExt(of: url)
             // 输入弹窗已经关掉了再激活 Finder，否则两边的激活会话会互相打架。
             FileCreator.reveal(url, in: directory)
         } catch {
             presentError(error)
         }
+    }
+
+    /// 全局热键：**不问名字**，直接用「上次用过的类型」建一个文件并在 Finder 中选中。
+    ///
+    /// 与菜单路径的唯一区别就是「不问名字」——文件名用「未命名.<扩展名>」、重名自动加序号，
+    /// 建完在 Finder 里选中，用户可以就地改名（同 Finder 自己的 ⌘⇧N 新建文件夹）。
+    func createFileQuickly() {
+        do {
+            let directory = try FinderPathProvider.currentDirectory()
+            guard let template = FileTemplateStore.quickCreateTemplate(
+                from: UserDefaults.standard.string(forKey: FileTemplateStore.defaultsKey) ?? "",
+                lastUsedExt: UserDefaults.standard.string(forKey: FileTemplateStore.lastUsedExtKey) ?? ""
+            ) else {
+                // 不能静默失败：热键没有任何可见反馈，不提示的话用户只会以为热键坏了。
+                presentMessage("还没有启用的文件类型。请先在「设置 → 创建文件」里添加一个类型并勾选它。")
+                return
+            }
+
+            let url = try FileCreator.createUntitled(template: template, in: directory)
+            recordLastUsedExt(of: url)
+            FileCreator.reveal(url, in: directory)
+        } catch {
+            presentError(error)
+        }
+    }
+
+    /// 记住这次实际建出来的扩展名，供下次热键直建复用。
+    ///
+    /// 记的是**文件实际的**扩展名而不是模板的：用户在命名弹窗里可以显式写别的扩展名
+    /// （如选 Markdown 却输入「报告.txt」），那次才代表他真正想要什么。
+    private func recordLastUsedExt(of url: URL) {
+        let ext = FileTemplateStore.normalizeExtension(url.pathExtension)
+        guard !ext.isEmpty else { return }
+        UserDefaults.standard.set(ext, forKey: FileTemplateStore.lastUsedExtKey)
     }
 
     /// 用配置的编辑器打开当前 Finder 目录。

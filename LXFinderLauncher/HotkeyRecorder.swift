@@ -13,18 +13,26 @@ import Carbon.HIToolbox
 @MainActor
 final class HotkeyRecorder: ObservableObject {
 
-    @Published var isRecording = false
+    /// 当前正在录哪个热键；nil 表示没在录。
+    @Published private(set) var recordingTarget: GlobalHotkey?
 
-    /// 录制完成回调：(keyCode, carbonModifiers)，均为 Carbon 值。
-    var onRecorded: ((UInt32, UInt32) -> Void)?
+    /// 录制完成回调：(哪个热键, keyCode, carbonModifiers)，后两者为 Carbon 值。
+    var onRecorded: ((GlobalHotkey, UInt32, UInt32) -> Void)?
 
     private var monitor: Any?
 
-    /// 开始录制。录制期间临时注销现有热键，避免自触发。
-    func begin() {
-        guard !isRecording else { return }
-        isRecording = true
-        HotkeyManager.shared.unregister()
+    var isRecording: Bool { recordingTarget != nil }
+
+    /// 开始录制指定热键。
+    ///
+    /// 只注销**正在录的那一个**，另一个热键保持可用。取舍：录制 A 时用户若按下 B 的组合键，
+    /// 不会被录进去（Carbon 已经把它变成 hot key 事件，本地 NSEvent 监听器看不到），
+    /// 而是真的执行 B 的动作——对「创建文件」热键意味着录制中可能凭空多出一个文件。
+    /// 这是有意选的：另一种做法是录制期间全注销，代价是录制中途崩溃会让两个热键都静默失效。
+    func begin(_ hotkey: GlobalHotkey) {
+        guard recordingTarget == nil else { return }
+        recordingTarget = hotkey
+        HotkeyManager.shared.unregister(hotkey)
 
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else {
@@ -41,26 +49,26 @@ final class HotkeyRecorder: ObservableObject {
             let carbon = Self.carbonModifiers(from: flags)
             guard carbon != 0 else { return nil }   // 拒绝无修饰键的裸按键
 
-            self.finish(keyCode: keyCode, carbonModifiers: carbon)
+            self.finish(hotkey: hotkey, keyCode: keyCode, carbonModifiers: carbon)
             return nil                              // 吞掉该按键
         }
     }
 
     /// 放弃录制：移除监听，并把录制开始时注销掉的全局热键按当前设置注册回来。
     ///
-    /// 必须有这条路径：`begin()` 会先注销热键，而收尾只靠 `finish()`（录制成功才调）。
+    /// 必须有这条路径：`begin(_:)` 会先注销那个热键，而收尾只靠 `finish(...)`（录制成功才调）。
     /// 少了它，用户点了录制又直接关掉设置窗口，热键就再也不会被注册回来——快捷键静默失效。
     func cancel() {
         removeMonitor()
-        guard isRecording else { return }
-        isRecording = false
+        guard recordingTarget != nil else { return }
+        recordingTarget = nil
         HotkeyManager.shared.applySettings()
     }
 
-    private func finish(keyCode: UInt32, carbonModifiers: UInt32) {
+    private func finish(hotkey: GlobalHotkey, keyCode: UInt32, carbonModifiers: UInt32) {
         removeMonitor()
-        isRecording = false
-        onRecorded?(keyCode, carbonModifiers)
+        recordingTarget = nil
+        onRecorded?(hotkey, keyCode, carbonModifiers)
     }
 
     private func removeMonitor() {
@@ -71,7 +79,7 @@ final class HotkeyRecorder: ObservableObject {
     }
 
     deinit {
-        // 兜底：正常路径由 finish() / cancel() 收尾，这里防的是两者都没走到的漏网情况。
+        // 兜底：正常路径由 finish(...) / cancel() 收尾，这里防的是两者都没走到的漏网情况。
         if let monitor {
             NSEvent.removeMonitor(monitor)
         }
