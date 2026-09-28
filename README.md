@@ -2,7 +2,7 @@
 
 ## 下载
 
-[⬇️ 下载最新版（v1.1.6）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+[⬇️ 下载最新版（v1.1.7）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
 
@@ -67,6 +67,7 @@ tccutil reset AppleEvents com.linx.LXFinderLauncher
 ```
 LXFinderLauncher/
 ├── scripts/                     # 构建 / 分发 / 发布脚本
+│   ├── README.md                # 四个脚本各自的用法与「发版前必看」
 │   ├── build.sh                 # 构建脚本（含命令解释）
 │   ├── make-blank-templates.sh  # 生成 Templates/ 下的空白 Office 模板
 │   ├── distribute-free.sh       # 免费分发打包（路径 A，$0）
@@ -111,6 +112,13 @@ LXFinderLauncher/
 ---
 
 ## 变更历史
+
+### V1.1.7 · 创建文件
+- 新增「创建文件」功能：菜单栏二级菜单就地新建文件（md / txt / docx / xlsx / pptx / json / yml / html），类型与顺序可在设置中配置，也能新增自定义格式。docx / xlsx / pptx 内置最小可用的空白模板，创建出来可直接双击打开。
+- 新增全局热键 **⌃⌥⌘N**：不弹窗直接建一个「未命名.<上次用的类型>」并在 Finder 中选中，可就地改名；重名自动加序号，绝不覆盖。
+- 设置页改为**侧边栏 + 详情面板**布局，分「通用 / 快捷键 / 终端 / 编辑器 / 创建文件 / 权限」六个面板。
+- 修复：录制快捷键时中途关闭设置窗口，会导致全局热键永久失效（热键被临时注销后不再注册回来）。
+- 修复：全新安装时默认热键不生效——设置页开关显示「已启用」但实际从未注册。
 
 ### V1.1.6 · 终端打开方式优化与快捷键体验
 - 终端「打开位置」：选择「新窗口」时**总是新建独立窗口**（不再并入已有窗口成为标签页）。
