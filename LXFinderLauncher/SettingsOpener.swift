@@ -22,12 +22,21 @@ import SwiftUI
 enum SettingsOpener {
     private static weak var settingsWindow: NSWindow?
 
-    /// 打开设置窗口并确保置前。
+    /// 打开设置窗口并确保置前，可指定落到哪个面板。
     ///
-    /// - Parameter showSettings: 首次打开时触发 SwiftUI Settings 场景显示的闭包
-    ///   （即 `@Environment(\.openSettings)`）。
+    /// - Parameters:
+    ///   - pane: 要定位到的面板；传 nil 则保持上次停留的面板（与系统设置的惯例一致）。
+    ///   - showSettings: 首次打开时触发 SwiftUI Settings 场景显示的闭包
+    ///     （即 `@Environment(\.openSettings)`）。
     @MainActor
-    static func open(showSettings: @MainActor () -> Void) {
+    static func open(pane: SettingsPane? = nil, showSettings: @MainActor () -> Void) {
+        // 先把目标面板写进 UserDefaults，再开窗。SettingsView 用 @AppStorage 读同一个键，
+        // 所以窗口**已经开着**时也能立刻切过去；没开时首次挂载读到的就是这个值。
+        // 关键：不要用「一次性标记」，那样只在首次打开生效，窗口已开的情况下点了没反应。
+        if let pane {
+            UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.defaultsKey)
+        }
+
         // 关键：先把本 App 激活为前台 App，否则设置窗口会被其它应用遮挡。
         NSApp.activate(ignoringOtherApps: true)
 

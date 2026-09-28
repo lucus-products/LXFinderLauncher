@@ -28,6 +28,7 @@ Cursor / VSCode 一键打开该目录
 | 多终端支持 | Terminal（系统）、iTerm2、自定义终端（任意 .app 路径） |
 | 新窗口 / 新标签页 | 可选在已有终端窗口**新建标签页**（而非新窗口） |
 | 用编辑器打开 | Cursor（默认）、VSCode、自定义编辑器一键打开当前目录 |
+| 创建文件 | 菜单栏「创建文件」二级菜单就地新建文件（md / txt / docx / xlsx / pptx / json / yml / html），类型、顺序可在设置中配置，也能新增自定义格式 |
 | 复制路径 | 把当前目录完整 POSIX 路径复制到剪贴板 |
 | 打开 Finder 目录 | 在 Finder 新窗口定位当前目录 |
 | 开机自启 | 登录时自动启动（SMAppService） |
@@ -65,6 +66,7 @@ tccutil reset AppleEvents com.linx.LXFinderLauncher
 LXFinderLauncher/
 ├── scripts/                     # 构建 / 分发 / 发布脚本
 │   ├── build.sh                 # 构建脚本（含命令解释）
+│   ├── make-blank-templates.sh  # 生成 Templates/ 下的空白 Office 模板
 │   ├── distribute-free.sh       # 免费分发打包（路径 A，$0）
 │   └── release.sh               # 签名 + 公证 + 打 DMG（路径 B，$99/年）
 ├── LXFinderLauncher.xcodeproj    # Xcode 工程（PBXFileSystemSynchronizedRootGroup 同步组结构）
@@ -76,6 +78,9 @@ LXFinderLauncher/
     ├── OSAScriptRunner.swift     # 公共 AppleScript 执行器（osascript 子进程）
     ├── TerminalLauncher.swift    # 终端协议 + Terminal/iTerm2/自定义 实现 + 工厂
     ├── EditorOpener.swift        # 编辑器协议 + Cursor/VSCode/自定义 实现 + 工厂
+    ├── FileTemplate.swift        # 创建文件：类型列表模型与 UserDefaults 读写
+    ├── FileCreator.swift         # 创建文件：文件名归一化、写盘、输入弹窗
+    ├── Templates/                # 空白 Office 模板（由 scripts/make-blank-templates.sh 生成）
     ├── HotkeyManager.swift       # Carbon RegisterEventHotKey 全局热键
     ├── HotkeyRecorder.swift      # 设置页录制组合键
     ├── KeycodeTable.swift        # 键码 → 显示名映射（纯函数，可单测）
@@ -92,6 +97,9 @@ LXFinderLauncher/
 - **全局热键**：Carbon `RegisterEventHotKey`，无需任何 TCC 授权、系统级独占；`EventHotKeyRef` 必须强持有。
 - **读取 Finder 目录用 osascript 子进程而非 NSAppleScript**——这是本项目最重要的一个坑，见下方变更历史 V1.0.0。
 - **打开终端/编辑器**：用 `NSWorkspace.open([dir], withApplicationAt:)`，不通过 Apple Events 控制目标应用，避免额外授权。
+- **创建文件的空白 Office 模板**：docx/xlsx/pptx 是 OOXML（zip 包），0 字节的空文件会被 Word/Excel/PowerPoint 判为「文件已损坏」。所以随包带三个最小可用的空白文档（`Templates/`），创建时直接拷贝；纯文本类格式空文件即合法，走 0 字节分支。模板由 `scripts/make-blank-templates.sh` 生成，不要手工改 `Templates/` 里的文件。
+- **菜单项的即时性**：`.menuBarExtraStyle(.menu)` 下**打开菜单不会触发视图重算**（[FB13683957](https://github.com/feedback-assistant/reports/issues/477)）。所以菜单里依赖设置的项必须用 `@AppStorage` 读，用 `UserDefaults.standard` 静态读要重启 App 才生效。
+- **设置窗口的侧边栏**：`HStack { List(.listStyle(.sidebar)) ; 详情 }` 手写，**不用 `NavigationSplitView`**。后者会无条件往窗口注入工具栏上的 sidebar toggle（`Settings` 场景本来没有工具栏），且 Apple 已确认的 rdar://122947424 会让 detail 列多出工具栏高度的空白——而 `Settings` 场景按根视图 ideal size 决定窗口尺寸，那层高度会让窗口尺寸失控。侧边栏材质与圆角选中高亮本来就来自 `.listStyle(.sidebar)`。新增一个面板只需往 `SettingsPane` 加一个 case + 一个 `xxxPane` 计算属性。
 - **开机自启**：`SMAppService.mainApp.register()`，需 App 位于 `/Applications`。
 
 ---

@@ -52,6 +52,20 @@ final class AppCommands {
         }
     }
 
+    /// 在当前 Finder 目录按模板创建文件，并在 Finder 中选中它。
+    func createFile(using template: FileTemplate) {
+        do {
+            let directory = try FinderPathProvider.currentDirectory()
+            guard let url = try FileCreator.promptAndCreate(template: template, in: directory) else {
+                return   // 用户取消，不是错误
+            }
+            // 输入弹窗已经关掉了再激活 Finder，否则两边的激活会话会互相打架。
+            FileCreator.reveal(url, in: directory)
+        } catch {
+            presentError(error)
+        }
+    }
+
     /// 用配置的编辑器打开当前 Finder 目录。
     func openInEditor() {
         guard let opener = EditorOpenerFactory.make() else { return }
@@ -125,16 +139,30 @@ final class AppCommands {
         alert.messageText = "LXFinderLauncher"
         alert.informativeText = error.localizedDescription
 
-        if case FinderPathError.tccDenied = error {
+        // 授权类错误多给一个直达系统设置的按钮——只有那里能真正解决问题，
+        // 光说「没有权限」用户不知道该去哪儿改。
+        if let settingsURL = Self.privacySettingsURL(for: error) {
             alert.addButton(withTitle: "打开授权设置")
             alert.addButton(withTitle: "取消")
             if alert.runModal() == .alertFirstButtonReturn {
-                let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!
-                NSWorkspace.shared.open(url)
+                NSWorkspace.shared.open(settingsURL)
             }
         } else {
             alert.addButton(withTitle: "好")
             alert.runModal()
         }
+    }
+
+    /// 授权类错误对应系统设置里的哪个面板；不是授权问题则返回 nil。
+    private static func privacySettingsURL(for error: Error) -> URL? {
+        let pane: String
+        if case FinderPathError.tccDenied = error {
+            pane = "Privacy_Automation"          // 控制 Finder：读当前目录
+        } else if case FileCreationError.noPermission = error {
+            pane = "Privacy_FilesAndFolders"     // 写桌面 / 文稿 / 下载
+        } else {
+            return nil
+        }
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     }
 }

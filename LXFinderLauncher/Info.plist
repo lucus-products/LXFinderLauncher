@@ -6,5 +6,16 @@
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>LXFinderLauncher 需要读取当前 Finder 窗口的目录，以便在对应位置打开终端。</string>
+	<!--
+	  「创建文件」是本 App 自己直接写盘（现有功能都是让 Finder / 终端代劳，不碰这几项授权）。
+	  桌面、文稿、下载三个目录受 TCC 保护，缺了对应的用途说明会被系统直接拒绝而不是弹窗征询。
+	  尤其注意 FinderPathProvider 在取不到 Finder 窗口时会回退到桌面，正好落在保护范围内。
+	-->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>LXFinderLauncher 需要在你正在浏览的目录（含桌面）创建文件。</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>LXFinderLauncher 需要在你正在浏览的目录（含文稿）创建文件。</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>LXFinderLauncher 需要在你正在浏览的目录（含下载）创建文件。</string>
 </dict>
 </plist>
