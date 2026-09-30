@@ -118,10 +118,3 @@ tccutil reset AppleEvents com.linx.LXFinderLauncher
 > 菜单栏 App 直接发 Apple Events 会被 TCC 静默拒绝（返回 `-1743`），子进程方式才能正常弹出授权框并拿到目录。
 > 详见 [README_dev.md](README_dev.md) 的「技术要点」。
 
-## 相关
-
-姊妹工具 **Lucus-Finder** 走 Finder 右键「服务」菜单，需要先在 Finder 里选中文件或文件夹；本工具走**菜单栏 + 全局快捷键**，不选中任何东西也能随时取当前窗口目录。
-
----
-
-*构建：`./scripts/build.sh [Debug|Release]`。技术栈：Swift 6 / SwiftUI / AppKit / Carbon / osascript。*
