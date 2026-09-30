@@ -48,12 +48,16 @@ final class AppCommands {
         }
     }
 
-    /// 复制当前 Finder 目录的路径到剪贴板。
-    func copyCurrentPath() {
+    /// 把当前 Finder 目录的路径按指定格式复制到剪贴板。
+    ///
+    /// 成功后会闪一下菜单栏图标：这个操作在屏幕上不留任何痕迹，不反馈的话用户会怀疑
+    /// 热键坏了（详见 `MenuBarFeedback`）。
+    func copyCurrentPath(format: PathCopyFormat = .fullPath) {
         do {
             let url = try FinderPathProvider.currentDirectory()
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.path, forType: .string)
+            NSPasteboard.general.setString(PathCopier.text(for: url, format: format), forType: .string)
+            MenuBarFeedback.shared.flash()
         } catch {
             presentError(error)
         }

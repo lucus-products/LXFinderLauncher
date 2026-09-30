@@ -695,3 +695,80 @@ struct TerminalLauncherErrorTests {
         }
     }
 }
+
+// MARK: - 复制路径的格式
+
+/// 每种格式都是一段「会被粘到别处去执行 / 打开」的文本。
+/// 转义错了，用户拿到的就是跑不了、或者更糟——跑成另一条命令的东西。
+struct PathCopierTests {
+
+    private func dir(_ path: String) -> URL {
+        URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    @Test func fullPathIsPlainPOSIXPath() {
+        // 不带尾斜杠。这是老版本「复制当前目录路径」的既有行为，不能悄悄改掉。
+        #expect(PathCopier.text(for: dir("/Users/me/Projects/foo"), format: .fullPath)
+                == "/Users/me/Projects/foo")
+    }
+
+    @Test func fileNameIsLastComponent() {
+        #expect(PathCopier.text(for: dir("/Users/me/Projects/foo"), format: .fileName) == "foo")
+        // 根目录没有「最后一段」，不能复制出空字符串。
+        #expect(PathCopier.text(for: dir("/"), format: .fileName) == "/")
+    }
+
+    @Test func cdCommandQuotesThePath() {
+        #expect(PathCopier.text(for: dir("/Users/me/Projects/foo"), format: .cdCommand)
+                == "cd '/Users/me/Projects/foo'")
+    }
+
+    @Test func cdCommandHandlesSpacesAndNonASCII() {
+        // 空格会让 cd 断成两个参数，中文也不是所有地方都安全——都要靠单引号兜住。
+        #expect(PathCopier.text(for: dir("/Users/me/My Documents/项目 A"), format: .cdCommand)
+                == "cd '/Users/me/My Documents/项目 A'")
+    }
+
+    @Test func cdCommandEscapesSingleQuote() {
+        // 单引号是单引号引用里唯一需要特殊处理的字符：必须写成 '\'' 才能表达字面量。
+        #expect(PathCopier.text(for: dir("/Users/me/it's here"), format: .cdCommand)
+                == #"cd '/Users/me/it'\''s here'"#)
+    }
+
+    @Test func fileURLIsPercentEncoded() {
+        // 手拼一个含空格的 file URL 会得到打不开的链接，必须走 URL 自己的编码。
+        #expect(PathCopier.text(for: dir("/Users/me/My Documents"), format: .fileURL)
+                == "file:///Users/me/My%20Documents/")
+    }
+
+    @Test func markdownLinkUsesFileNameAsLabel() {
+        #expect(PathCopier.text(for: dir("/Users/me/Projects/foo"), format: .markdownLink)
+                == "[foo](file:///Users/me/Projects/foo/)")
+    }
+
+    @Test func shellQuotingMatchesShellRules() {
+        #expect(PathCopier.shellQuoted("plain") == "'plain'")
+        #expect(PathCopier.shellQuoted("") == "''")
+        #expect(PathCopier.shellQuoted("a'b") == #"'a'\''b'"#)
+        // 双引号里会被解释的字符（`$`、反引号、`!`）在单引号里都是字面量，这正是用单引号的理由。
+        #expect(PathCopier.shellQuoted("$HOME `x`!") == "'$HOME `x`!'")
+    }
+
+    @Test func everyFormatIsListedInMenuOrder() {
+        // 声明顺序即菜单顺序；漏一个 case 会让格式悄悄从菜单里消失。
+        #expect(PathCopyFormat.allCases.map(\.title)
+                == ["完整路径", "文件名", "cd 命令", "Markdown 链接", "file:// URL"])
+    }
+
+    @Test func readmeExampleMatchesActualOutput() {
+        // README「复制路径的五种格式」那张表用的就是这条路径。在这里钉住它：
+        // 以后改了实现却没同步文档，这条会红——文档写了具体值，就必须是真的。
+        let url = dir("/Users/me/My Documents")
+        #expect(PathCopier.text(for: url, format: .fullPath) == "/Users/me/My Documents")
+        #expect(PathCopier.text(for: url, format: .fileName) == "My Documents")
+        #expect(PathCopier.text(for: url, format: .cdCommand) == "cd '/Users/me/My Documents'")
+        #expect(PathCopier.text(for: url, format: .markdownLink)
+                == "[My Documents](file:///Users/me/My%20Documents/)")
+        #expect(PathCopier.text(for: url, format: .fileURL) == "file:///Users/me/My%20Documents/")
+    }
+}

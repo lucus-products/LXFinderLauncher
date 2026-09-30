@@ -86,7 +86,19 @@ struct MenuContentView: View {
     var body: some View {
         Button("在此处打开终端") { AppCommands.shared.openTerminalHere() }
         editorMenu
-        Button("复制当前目录路径") { AppCommands.shared.copyCurrentPath() }
+        // 「复制路径」二级子菜单：同一份路径有好几种常用写法，收进子菜单给菜单栏省一行。
+        // 全局热键 ⌃⌥⌘C 仍然固定复制「完整路径」——热键没有选格式的机会，而完整路径通用性最好。
+        Menu("复制路径") {
+            ForEach(PathCopyFormat.allCases) { format in
+                Button(format.title) {
+                    // 与「创建文件」同一条理由：读路径失败时要弹错误框，而弹窗必须等菜单的
+                    // tracking session 结束，否则抢不到键盘焦点。
+                    DispatchQueue.main.async {
+                        AppCommands.shared.copyCurrentPath(format: format)
+                    }
+                }
+            }
+        }
         Button("打开 Finder 目录") { AppCommands.shared.revealInFinder() }
 
         // 「创建文件」二级子菜单。

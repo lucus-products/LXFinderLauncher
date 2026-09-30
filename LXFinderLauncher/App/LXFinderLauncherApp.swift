@@ -27,12 +27,20 @@ struct LXFinderLauncherApp: App {
 }
 
 /// 菜单栏图标：默认显示 App 图标，可在设置中切换回终端图标（保留，方便自定义）。
+///
+/// 还负责显示**瞬时反馈**：复制路径这类成功后屏幕上什么都没变的操作，会让图标闪一下勾
+/// （见 `MenuBarFeedback`）。
 struct MenuBarIconView: View {
     /// 0 = App 图标（默认），1 = 终端图标。
     @AppStorage("menuBarIconStyle") private var style = 0
 
+    /// 必须用 @ObservedObject 而不是直接读 `MenuBarFeedback.shared`，否则闪烁不会刷新图标。
+    @ObservedObject private var feedback = MenuBarFeedback.shared
+
     var body: some View {
-        if style == 1 {
+        if let symbol = feedback.flashSymbol {
+            Image(systemName: symbol)
+        } else if style == 1 {
             Image(systemName: "terminal")
         } else {
             Image(nsImage: AppIconImage.menuBar())
