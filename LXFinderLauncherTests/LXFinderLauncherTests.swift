@@ -6,6 +6,7 @@
 //
 
 import Testing
+import Foundation
 import Carbon.HIToolbox
 @testable import LXFinderLauncher
 
@@ -350,5 +351,347 @@ struct QuickCreateTemplateTests {
         let allDisabled = FileTemplateStore.encode([FileTemplate(name: "X", ext: "x", enabled: false)])
         #expect(FileTemplateStore.quickCreateTemplate(from: allDisabled, lastUsedExt: "x") == nil)
         #expect(FileTemplateStore.quickCreateTemplate(from: "[]", lastUsedExt: "") == nil)
+    }
+}
+
+// MARK: - 编辑器列表
+
+struct EditorStoreTests {
+
+    @Test func emptyJSONWithLegacyOffIsEmpty() {
+        // 旧配置的「关闭」是 kind 0，不是某个种类——派生结果就该是空列表。
+        #expect(EditorStore.editors(from: "", legacyKind: 0, legacyPath: "").isEmpty)
+    }
+
+    @Test func derivesSingleEditorFromLegacyKind() {
+        let cursor = EditorStore.editors(from: "", legacyKind: 1, legacyPath: "")
+        #expect(cursor.count == 1)
+        #expect(cursor.first?.kind == .cursor)
+        #expect(cursor.first?.name == "Cursor")
+
+        let vscode = EditorStore.editors(from: "", legacyKind: 2, legacyPath: "")
+        #expect(vscode.first?.kind == .vscode)
+        #expect(vscode.first?.name == "Visual Studio Code")
+    }
+
+    @Test func derivesCustomEditorNameFromPath() {
+        let list = EditorStore.editors(from: "", legacyKind: 3,
+                                       legacyPath: "/Applications/Nova.app")
+        #expect(list.count == 1)
+        #expect(list.first?.kind == .custom)
+        #expect(list.first?.path == "/Applications/Nova.app")
+        // 显示名取路径末段并去掉 .app 后缀。
+        #expect(list.first?.name == "Nova")
+    }
+
+    @Test func customWithoutPathIsNotDerived() {
+        // 旧配置选了「自定义」却把路径留空，等于没配。
+        #expect(EditorStore.editors(from: "", legacyKind: 3, legacyPath: "   ").isEmpty)
+    }
+
+    @Test func derivedIDsAreStable() {
+        // 派生结果会被反复解码做 ForEach 身份比对；id 每次现生成会让列表身份抖动、绑定串行。
+        let first = EditorStore.editors(from: "", legacyKind: 1, legacyPath: "").map(\.id)
+        let second = EditorStore.editors(from: "", legacyKind: 1, legacyPath: "").map(\.id)
+        #expect(first == second)
+    }
+
+    @Test func explicitEmptyListWinsOverLegacy() {
+        // 键一旦被写过（哪怕是 `[]`）就再也不看旧键——否则用户把编辑器全删掉之后，
+        // 旧配置里的 Cursor 会被一次次捞回来。
+        #expect(EditorStore.editors(from: "[]", legacyKind: 1, legacyPath: "").isEmpty)
+    }
+
+    @Test func explicitListWinsOverLegacy() {
+        let list = [EditorEntry(kind: .custom, name: "Nova", path: "/Applications/Nova.app")]
+        let json = EditorStore.encode(list)
+        #expect(EditorStore.editors(from: json, legacyKind: 1, legacyPath: "") == list)
+    }
+
+    @Test func roundTripPreservesOrder() {
+        let list = [
+            EditorEntry(kind: .vscode, name: "乙"),
+            EditorEntry(kind: .cursor, name: "甲"),
+        ]
+        #expect(EditorStore.editors(from: EditorStore.encode(list),
+                                    legacyKind: 1, legacyPath: "") == list)
+    }
+
+    @Test func menuEditorsKeepsOnlyEnabled() {
+        let json = EditorStore.encode([
+            EditorEntry(kind: .cursor, name: "Cursor"),
+            EditorEntry(kind: .vscode, name: "VSCode", enabled: false),
+        ])
+        #expect(EditorStore.menuEditors(from: json, legacyKind: 0, legacyPath: "").map(\.name)
+                == ["Cursor"])
+    }
+
+    @Test func menuEditorsSkipsCustomWithoutPath() {
+        // 「添加编辑器 → 自定义…」会先插一条路径为空的草稿。它不该进菜单——
+        // 进去就变成一个点了必然报「找不到」的菜单项。
+        let json = EditorStore.encode([
+            EditorEntry(kind: .cursor, name: "Cursor"),
+            EditorEntry(kind: .custom, name: "自定义编辑器", path: ""),
+            EditorEntry(kind: .custom, name: "只有空白", path: "   "),
+            EditorEntry(kind: .custom, name: "填好了", path: "/Applications/Nova.app"),
+        ])
+        let menu = EditorStore.menuEditors(from: json, legacyKind: 0, legacyPath: "")
+        #expect(menu.map(\.name) == ["Cursor", "填好了"])
+    }
+
+    @Test func builtInEditorsNeedNoPathToBeConfigured() {
+        // 内置编辑器的路径是运行时按 bundle id 解析的，不该因为 path 为空就被当成草稿。
+        #expect(EditorStore.isConfigured(EditorEntry(kind: .cursor, name: "Cursor", path: "")))
+        #expect(EditorStore.isConfigured(EditorEntry(kind: .vscode, name: "VSCode", path: "")))
+        // 自定义则必须有路径。
+        #expect(!EditorStore.isConfigured(EditorEntry(kind: .custom, name: "x", path: "")))
+    }
+
+    @Test func decodesEntryWithMissingFields() {
+        // 手改 UserDefaults、或以后给 EditorEntry 加字段时，单条残缺不该让整份配置解码失败。
+        let list = EditorStore.editors(from: #"[{"kind": 1}]"#, legacyKind: 0, legacyPath: "")
+        #expect(list.count == 1)
+        #expect(list.first?.kind == .cursor)
+        #expect(list.first?.name == "")
+    }
+}
+
+// MARK: - 自定义动作
+
+struct CustomActionStoreTests {
+
+    @Test func emptyJSONIsEmptyList() {
+        // 刻意不预置任何示例：这个列表里每一条都会被真的拿去执行，
+        // 默认塞一条等于替用户决定在他自己目录里跑什么。
+        #expect(CustomActionStore.actions(from: "").isEmpty)
+        #expect(CustomActionStore.defaultActions.isEmpty)
+    }
+
+    @Test func roundTripPreservesOrder() {
+        let list = [
+            CustomAction(name: "乙", command: "echo 2"),
+            CustomAction(name: "甲", command: "echo 1"),
+        ]
+        #expect(CustomActionStore.actions(from: CustomActionStore.encode(list)) == list)
+    }
+
+    @Test func menuActionsSkipsDisabledAndDrafts() {
+        let json = CustomActionStore.encode([
+            CustomAction(name: "可用", command: "echo ok"),
+            CustomAction(name: "关掉的", command: "echo off", enabled: false),
+            CustomAction(name: "", command: "echo 没名字"),
+            CustomAction(name: "没命令", command: ""),
+            CustomAction(name: "只有空白", command: "   "),
+        ])
+        #expect(CustomActionStore.menuActions(from: json).map(\.name) == ["可用"])
+    }
+
+    @Test func menuActionsSkipsOverlongCommand() {
+        // 超长命令可能在终端那边被截断成另一条命令，宁可不显示。
+        let long = String(repeating: "a", count: CustomActionStore.maxCommandLength + 1)
+        let json = CustomActionStore.encode([CustomAction(name: "太长", command: long)])
+        #expect(CustomActionStore.menuActions(from: json).isEmpty)
+    }
+
+    @Test func normalizeTrimsName() {
+        #expect(CustomActionStore.normalize(CustomAction(name: "  部署  ", command: "x")).name == "部署")
+    }
+
+    @Test func normalizeFlattensNewlines() {
+        // 换行会在终端里变成多次回车，等于把一条命令拆成几条依次执行，语义完全变了。
+        let normalized = CustomActionStore.normalize(
+            CustomAction(name: "部署", command: "git pull\nnpm run build"))
+        #expect(!normalized.command.contains("\n"))
+        #expect(normalized.command.contains("git pull"))
+        #expect(normalized.command.contains("npm run build"))
+    }
+
+    @Test func normalizePreservesInnerShellSyntax() {
+        // 命令中间的引号、管道、$、反斜杠一个字符都不能动——任何「清洗」都是在破坏命令。
+        let command = #"cd . && grep "x y" $HOME/f | head -1"#
+        #expect(CustomActionStore.normalize(CustomAction(name: "n", command: command)).command == command)
+    }
+}
+
+// MARK: - 执行命令的 AppleScript 源码
+
+struct TerminalCommandScriptTests {
+
+    /// 四种组合，用来逐个过不变量。
+    private var allScripts: [(String, String)] {
+        [("Terminal 新窗口", TerminalCommandScript.terminal(mode: .newWindow)),
+         ("Terminal 新标签页", TerminalCommandScript.terminal(mode: .newTab)),
+         ("iTerm2 新窗口", TerminalCommandScript.iTerm(mode: .newWindow)),
+         ("iTerm2 新标签页", TerminalCommandScript.iTerm(mode: .newTab))]
+    }
+
+    @Test func commandArrivesThroughArgv() {
+        // 命令只能从 argv 拿。脚本里出现 item 2 of argv 才说明调用方是把命令当参数传的，
+        // 而不是拼进了源码。拼进去的话，命令里的引号 / $ / 反斜杠会被 AppleScript
+        // 的转义规则改写，轻则语法错，重则执行了另一条命令。
+        for (name, script) in allScripts {
+            #expect(script.contains("item 1 of argv"), "\(name) 少了目录参数")
+            #expect(script.contains("item 2 of argv"), "\(name) 少了命令参数")
+        }
+    }
+
+    @Test func runsAfterChangingDirectory() {
+        // 先 cd 到 Finder 当前目录再执行，命令里才能用 `.` 指代那个目录。
+        let expected = #""cd " & quoted form of thePath & " && " & theCommand"#
+        for (name, script) in allScripts {
+            #expect(script.contains(expected), "\(name) 没有先 cd 再执行")
+        }
+    }
+
+    @Test func pathIsShellQuoted() {
+        // 目录可能含空格或中文，必须走 AppleScript 的 quoted form 让 shell 正确解析。
+        for (name, script) in allScripts {
+            #expect(script.contains("quoted form of thePath"), "\(name) 没有对路径做 shell 引用")
+        }
+    }
+
+    @Test func iTermNewTabDoesNotWriteIntoCurrentSession() {
+        // 往「front window 的 current session」写会把命令直接敲进用户正在跑的 vim / npm 里。
+        // 必须先 create tab，再写那个新会话。
+        let script = TerminalCommandScript.iTerm(mode: .newTab)
+        #expect(script.contains("create tab with default profile"))
+        #expect(script.contains("current session of current window"))
+    }
+
+    @Test func everyHandlerClosesWithEndRun() {
+        // 只写 `on run argv` 不收尾会报 -2741 语法错。
+        for (name, script) in allScripts {
+            #expect(script.hasSuffix("end run"), "\(name) 少了 end run")
+        }
+    }
+}
+
+// MARK: - 生成的 AppleScript 能否通过编译
+
+/// 用 `osacompile` 把生成的脚本真编译一遍。
+///
+/// 光比字符串是抓不到语法错的——项目里踩过「`on run argv` 少了 `end run` 报 -2741」
+/// 这种只有编译器才看得出来的问题。这里只**编译不执行**，不会打开任何终端窗口。
+struct AppleScriptSyntaxTests {
+
+    @Test func generatedScriptsCompile() throws {
+        let scripts: [(String, String)] = [
+            ("Terminal 新窗口", TerminalCommandScript.terminal(mode: .newWindow)),
+            ("Terminal 新标签页", TerminalCommandScript.terminal(mode: .newTab)),
+            ("iTerm2 新窗口", TerminalCommandScript.iTerm(mode: .newWindow)),
+            ("iTerm2 新标签页", TerminalCommandScript.iTerm(mode: .newTab)),
+        ]
+
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("LXFinderLauncherSyntaxTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for (name, script) in scripts {
+            let source = dir.appendingPathComponent("script.applescript")
+            let compiled = dir.appendingPathComponent("script.scpt")
+            try script.write(to: source, atomically: true, encoding: .utf8)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osacompile")
+            process.arguments = ["-o", compiled.path, source.path]
+            let errors = Pipe()
+            process.standardError = errors
+            try process.run()
+            process.waitUntilExit()
+
+            let message = String(data: errors.fileHandleForReading.readDataToEndOfFile(),
+                                 encoding: .utf8) ?? ""
+            #expect(process.terminationStatus == 0, "\(name) 编译失败：\(message)")
+        }
+    }
+}
+
+// MARK: - osascript 参数传递
+
+/// 覆盖 `OSAScriptRunner` 的 argv 传递。这些用例只用纯计算脚本，
+/// **不会**往 Terminal 发 Apple Event，所以跑测试不会弹出任何终端窗口。
+struct OSAScriptRunnerArgumentTests {
+
+    /// 回显第二个参数，用来验证参数是原样送达的。
+    private let echoSecond = """
+    on run argv
+        return item 2 of argv
+    end run
+    """
+
+    @Test func passesArgumentsVerbatim() throws {
+        let command = "npm run dev -- --port 3000"
+        #expect(try OSAScriptRunner.run(echoSecond, arguments: ["/tmp", command]) == command)
+    }
+
+    @Test func passesCommandsStartingWithDash() throws {
+        // 命令可能是 `--help` / `-la` 这种形式。osascript 用自己的 getopt 解析命令行，
+        // 不加 `--` 终止符会被当成它自己的选项而直接失败（"illegal option -- f"）。
+        #expect(try OSAScriptRunner.run(echoSecond, arguments: ["/tmp", "--help"]) == "--help")
+        #expect(try OSAScriptRunner.run(echoSecond, arguments: ["/tmp", "-la"]) == "-la")
+    }
+
+    @Test func passesQuotesAndDollarsVerbatim() throws {
+        // 命令里带引号、$、反斜杠时不能被 AppleScript 的转义规则改写。
+        let command = #"echo "a b" $HOME \n 'x'"#
+        #expect(try OSAScriptRunner.run(echoSecond, arguments: ["/tmp", command]) == command)
+    }
+}
+
+// MARK: - 授权失败的呈现
+
+/// 「自动化授权被拒」必须能被翻译成一条带「打开授权设置」按钮的弹窗。
+///
+/// 这条路径出问题的症状正是「点了没反应、也没有提示」的两种成因：
+/// 错误在途中被吞掉，或者虽然弹了却没给直达设置的入口——两者都让用户无从下手。
+@MainActor
+struct PrivacySettingsURLTests {
+
+    @Test func tccDeniedFromFinderPointsAtAutomation() {
+        let url = AppCommands.privacySettingsURL(for: FinderPathError.tccDenied)
+        #expect(url?.absoluteString.contains("Privacy_Automation") == true)
+    }
+
+    @Test func tccDeniedFromAppleScriptPointsAtAutomation() {
+        // 「打开终端」「自定义动作」走的是 OSAScriptRunner，抛的是 OSAScriptError，
+        // 不是 FinderPathError。这条分支漏掉的话，控制终端被拒时用户只会看到一句
+        // 「没有自动化授权」，拿不到直达设置的按钮。
+        let url = AppCommands.privacySettingsURL(for: OSAScriptError.tccDenied)
+        #expect(url?.absoluteString.contains("Privacy_Automation") == true)
+    }
+
+    @Test func filePermissionPointsAtFilesAndFolders() {
+        let error = FileCreationError.noPermission(URL(fileURLWithPath: "/tmp"))
+        let url = AppCommands.privacySettingsURL(for: error)
+        #expect(url?.absoluteString.contains("Privacy_FilesAndFolders") == true)
+    }
+
+    @Test func unrelatedErrorHasNoSettingsShortcut() {
+        // 不是授权问题就别给「打开授权设置」按钮，那会把用户引到无关的面板。
+        #expect(AppCommands.privacySettingsURL(for: OSAScriptError.timeoutOrBusy) == nil)
+    }
+}
+
+// MARK: - 终端 App 不在原位
+
+@MainActor
+struct TerminalLauncherErrorTests {
+
+    @Test func customTerminalThrowsWhenAppIsMissing() {
+        // 之前这里是 print + return，Release 构建里用户看到的就是「点了没反应」。
+        let launcher = CustomTerminalLauncher(
+            appURL: URL(fileURLWithPath: "/Applications/不存在的终端-\(UUID().uuidString).app"))
+        #expect(throws: TerminalError.self) {
+            try launcher.openTerminal(at: URL(fileURLWithPath: "/tmp"), mode: .newWindow)
+        }
+    }
+
+    @Test func customTerminalRefusesToRunCommands() {
+        // 自定义终端只能被 NSWorkspace 打开目录，没有注入命令的手段。
+        let launcher = CustomTerminalLauncher(appURL: URL(fileURLWithPath: "/Applications/X.app"))
+        #expect(throws: TerminalError.self) {
+            try launcher.run("echo hi", at: URL(fileURLWithPath: "/tmp"), mode: .newWindow)
+        }
     }
 }

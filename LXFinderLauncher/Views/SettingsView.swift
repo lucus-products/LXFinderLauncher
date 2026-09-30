@@ -23,7 +23,9 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     /// SwiftUI 观察得到的依赖，键一变列表选中项就跟着变。
     static let defaultsKey = "settingsPane"
 
-    case general, shortcuts, terminal, editor, newFile, permissions
+    /// case 名就是持久化用的 rawValue，**改名等于让老用户上次停留的面板丢失**（会回退到「通用」）。
+    /// 插入位置决定侧边栏顺序，所以 `.actions` 放在 `.newFile` 之后、`.permissions` 之前。
+    case general, shortcuts, terminal, editor, newFile, actions, permissions
 
     /// Swift 不给枚举合成 `id`，必须手写。
     /// 用 `Self`（而不是 `rawValue` 的 String）是为了让 `SettingsPane?` 直接当 List 的选中类型。
@@ -36,6 +38,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .terminal: return "终端"
         case .editor: return "编辑器"
         case .newFile: return "创建文件"
+        case .actions: return "自定义动作"
         case .permissions: return "权限"
         }
     }
@@ -47,6 +50,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .terminal: return "terminal"
         case .editor: return "curlybraces"
         case .newFile: return "doc.badge.plus"
+        case .actions: return "bolt"
         case .permissions: return "lock.shield"
         }
     }
@@ -74,8 +78,12 @@ struct SettingsView: View {
     @AppStorage("customTerminalPath") private var customTerminalPath = ""
     @AppStorage("terminalOpenMode") private var terminalOpenMode = 0
 
-    @AppStorage("editorKind") private var editorKind = 0
-    @AppStorage("customEditorPath") private var customEditorPath = ""
+    /// 编辑器列表（JSON）。与菜单读写**同一个键**，改动才能双向同步。
+    @AppStorage(EditorStore.defaultsKey) private var editorsJSON = ""
+    /// 单选时代的旧键。列表还没被写过时由它们派生，所以要保留读——老用户升级上来
+    /// 不用任何一次性迁移代码就能看到自己原来配的那个编辑器（详见 EditorStore）。
+    @AppStorage(EditorStore.legacyKindKey) private var legacyEditorKind = 0
+    @AppStorage(EditorStore.legacyPathKey) private var legacyEditorPath = ""
 
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("autoCheckUpdates") private var autoCheckUpdates = true
@@ -83,6 +91,9 @@ struct SettingsView: View {
 
     /// 「创建文件」的类型列表。与菜单栏读写**同一个键**，改动才能双向同步。
     @AppStorage(FileTemplateStore.defaultsKey) private var fileTemplatesJSON = ""
+
+    /// 自定义动作列表（JSON）。与菜单读写**同一个键**。
+    @AppStorage(CustomActionStore.defaultsKey) private var customActionsJSON = ""
 
     /// 类型列表的本地编辑态。
     ///
@@ -94,6 +105,17 @@ struct SettingsView: View {
     @State private var templatesSaveTask: Task<Void, Never>?
     /// 最近一次「已同步」的 JSON，用来区分「用户改了」和「onAppear 刚装载」。
     @State private var lastSyncedTemplatesJSON = ""
+
+    /// 编辑器列表的本地编辑态。与 templates 同一套管线，只是各自持有自己的
+    /// 任务句柄与哨兵——**不能共用**，否则编辑模板会把还没落盘的编辑器改动取消掉。
+    @State private var editors: [EditorEntry] = []
+    @State private var editorsSaveTask: Task<Void, Never>?
+    @State private var lastSyncedEditorsJSON = ""
+
+    /// 自定义动作列表的本地编辑态。理由同上（第三份，各存各的）。
+    @State private var actions: [CustomAction] = []
+    @State private var actionsSaveTask: Task<Void, Never>?
+    @State private var lastSyncedActionsJSON = ""
 
     /// 侧边栏选中项。存 UserDefaults 而不是 `@State`，这样菜单里的「管理文件类型…」
     /// 能指定打开到哪个面板（原因见 `SettingsPane.defaultsKey`）。
@@ -134,19 +156,36 @@ struct SettingsView: View {
         // 也**不要**在外面再套 .padding——那会让 ideal size 变大、窗口比这里写的尺寸还大。
         .frame(width: 720, height: 460)
         .onChange(of: templates) { _, newValue in scheduleSaveTemplates(newValue) }
+        .onChange(of: editors) { _, newValue in scheduleSaveEditors(newValue) }
+        .onChange(of: actions) { _, newValue in scheduleSaveActions(newValue) }
         .onDisappear {
             // 关窗口时兜底：把最后 400ms 内的编辑写回，并收掉可能还在进行的快捷键录制
-            // （否则录制时临时注销的全局热键不会被注册回来）。
+            // （否则录制时临时注销的全局热键不会被注册回来）。三份列表都要落盘。
             saveTemplatesNow()
+            saveEditorsNow()
+            saveActionsNow()
             recorder.cancel()
         }
         .onAppear {
             // 同步开机自启状态（用户可能在系统设置里手动改过）。
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            // 装载类型列表，并把「当前值」记成已同步，避免刚打开就被当成用户改动写回去。
+            // 装载三份列表，并把「当前值」记成已同步，避免刚打开就被当成用户改动写回去。
+            // **每一份都要装**：漏掉任何一份，第一次打开设置页就会把它写回 UserDefaults。
+            // 对编辑器尤其要紧——那会把从旧键派生出来的结果固化成快照，
+            // 之后老版本再改 editorKind 就再也影响不到新列表了。
             templates = FileTemplateStore.templates(from: fileTemplatesJSON)
-            lastSyncedTemplatesJSON = FileTemplateStore.encode(
-                templates.map { FileTemplateStore.normalize($0) })
+            lastSyncedTemplatesJSON = encodedList(templates) {
+                $0.map { FileTemplateStore.normalize($0) }
+            }
+
+            editors = EditorStore.editors(from: editorsJSON,
+                                          legacyKind: legacyEditorKind,
+                                          legacyPath: legacyEditorPath)
+            lastSyncedEditorsJSON = encodedList(editors) { $0 }
+
+            actions = CustomActionStore.actions(from: customActionsJSON)
+            lastSyncedActionsJSON = encodedList(actions) { $0 }
+
             recorder.onRecorded = { hotkey, keyCode, modifiers in
                 // GlobalHotkey 的 setter 是 nonmutating 的，直接写 UserDefaults。
                 hotkey.keyCode = Int(keyCode)
@@ -179,6 +218,7 @@ struct SettingsView: View {
         case .terminal: terminalPane
         case .editor: editorPane
         case .newFile: newFilePane
+        case .actions: actionsPane
         case .permissions: permissionsPane
         }
     }
@@ -268,7 +308,12 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("「打开终端」在 Finder 当前窗口所在目录打开终端。\n「创建文件」不弹窗，直接建一个「未命名」文件并在 Finder 中选中它，可就地改名；类型取你上次用过的那个，可在「创建文件」面板里配置。")
+                Text("""
+                「打开终端」在 Finder 当前窗口所在目录打开终端。
+                「创建文件」不弹窗，直接建一个「未命名」文件并在 Finder 中选中它，可就地改名；类型取你上次用过的那个，可在「创建文件」面板里配置。
+                「用编辑器打开」打开编辑器列表里的第一个，可在「编辑器」面板里配置。
+                「复制当前目录路径」把当前目录的完整路径复制到剪贴板。
+                """)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -352,35 +397,71 @@ struct SettingsView: View {
 
     // MARK: - 编辑器
 
+    /// 编辑器列表。与「创建文件」同一套表格化行：勾选 + 显示名 +（自定义才有的）路径 + 操作按钮。
     private var editorPane: some View {
         pane {
             Section("编辑器") {
-                Picker("用编辑器打开 Finder 目录", selection: $editorKind) {
-                    Text("关闭").tag(0)
-                    if isCursorInstalled {
-                        Text("Cursor").tag(1)
-                    }
-                    if isVSCodeInstalled {
-                        Text("Visual Studio Code").tag(2)
-                    }
-                    Text("自定义…").tag(3)
-                }
-                .onChange(of: editorKind) { _, newValue in
-                    if (newValue == 1 && !isCursorInstalled) || (newValue == 2 && !isVSCodeInstalled) {
-                        editorKind = 0
-                    }
-                }
+                Text("勾选 = 出现在菜单里；上下顺序即菜单顺序。全局热键「用编辑器打开」打开的是**第一个**。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                if editorKind == 3 {
-                    TextField("编辑器 App 路径，如 /Applications/Nova.app",
-                              text: $customEditorPath)
-                }
-
-                if editorKind != 0 {
-                    Text("菜单栏将出现「用 \(EditorOpenerFactory.displayName()) 打开」项。")
+                if editors.isEmpty {
+                    Text("还没有添加编辑器。用下面的「添加编辑器」选一个，菜单栏就会出现对应项。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                ForEach($editors) { $entry in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $entry.enabled)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+
+                            TextField("显示名", text: $entry.name, prompt: Text("显示名"))
+                                .textFieldStyle(.roundedBorder)
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity)
+                                .accessibilityLabel("显示名")
+
+                            // 只有自定义编辑器要填路径：内置的按 bundle id 定位，App 装在哪都找得到。
+                            if entry.kind == .custom {
+                                TextField("App 路径", text: $entry.path,
+                                          prompt: Text("/Applications/Nova.app"))
+                                    .textFieldStyle(.roundedBorder)
+                                    .labelsHidden()
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityLabel("编辑器 App 路径")
+                            }
+
+                            rowButtons(isFirst: editors.first?.id == entry.id,
+                                       isLast: editors.last?.id == entry.id,
+                                       move: { moveEditor(id: entry.id, by: $0) },
+                                       remove: { removeEditor(id: entry.id) })
+                        }
+
+                        // 说清楚为什么它不在菜单里，免得用户以为菜单坏了。
+                        if !EditorStore.isConfigured(entry) {
+                            Text("填了 App 路径后才会出现在菜单里。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Menu("添加编辑器") {
+                    if isCursorInstalled {
+                        Button("Cursor") { addEditor(.cursor) }
+                    }
+                    if isVSCodeInstalled {
+                        Button("Visual Studio Code") { addEditor(.vscode) }
+                    }
+                    Button("自定义…") { addEditor(.custom) }
+                }
+
+                Text("同时启用多个时，菜单里会收成一个「用编辑器打开」子菜单。自定义编辑器请填 .app 的完整路径。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -421,39 +502,10 @@ struct SettingsView: View {
                             .frame(width: 64)
                             .accessibilityLabel("扩展名")
 
-                        // 按钮组整体右对齐，各行位置一致。
-                        HStack(spacing: 4) {
-                            // `.borderless` 是完全无边框的裸图标，看不出能点；
-                            // `.bordered` + `.circle` 才有明显的可点外观。
-                            Button { moveTemplate(id: template.id, by: -1) } label: {
-                                Image(systemName: "arrow.up").frame(width: 12, height: 12)
-                            }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.circle)
-                            .controlSize(.small)
-                            .disabled(templates.first?.id == template.id)
-                            .help("上移")
-                            .accessibilityLabel("上移")
-
-                            Button { moveTemplate(id: template.id, by: 1) } label: {
-                                Image(systemName: "arrow.down").frame(width: 12, height: 12)
-                            }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.circle)
-                            .controlSize(.small)
-                            .disabled(templates.last?.id == template.id)
-                            .help("下移")
-                            .accessibilityLabel("下移")
-
-                            Button { removeTemplate(id: template.id) } label: {
-                                Image(systemName: "trash").frame(width: 12, height: 12)
-                            }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.circle)
-                            .controlSize(.small)
-                            .help("删除")
-                            .accessibilityLabel("删除")
-                        }
+                        rowButtons(isFirst: templates.first?.id == template.id,
+                                   isLast: templates.last?.id == template.id,
+                                   move: { moveTemplate(id: template.id, by: $0) },
+                                   remove: { removeTemplate(id: template.id) })
                     }
                 }
 
@@ -463,6 +515,77 @@ struct SettingsView: View {
                 }
 
                 Text("扩展名不用写点，填完才会出现在菜单里。新增的格式创建空白文件；内置的 docx / xlsx / pptx 会创建可直接打开的空白文档。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - 自定义动作
+
+    /// 动作列表。每条占**两行**：第一行「勾选 + 名字 + 操作按钮」，第二行整行给命令——
+    /// 命令天然长，和名字挤在一行会被压到看不清也改不动。
+    private var actionsPane: some View {
+        pane {
+            Section("自定义动作") {
+                Text("勾选 = 出现在菜单里；上下顺序即菜单顺序。执行时会先 cd 到 Finder 当前目录，命令里用 `.` 就代表那个目录。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if actions.isEmpty {
+                    Text("还没有配置动作。用下面的「添加动作」加一条，菜单栏就会出现「自定义动作」子菜单。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach($actions) { $action in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $action.enabled)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+
+                            TextField("名字", text: $action.name, prompt: Text("名字"))
+                                .textFieldStyle(.roundedBorder)
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity)
+                                .accessibilityLabel("名字")
+
+                            rowButtons(isFirst: actions.first?.id == action.id,
+                                       isLast: actions.last?.id == action.id,
+                                       move: { moveAction(id: action.id, by: $0) },
+                                       remove: { removeAction(id: action.id) })
+                        }
+
+                        TextField("命令", text: $action.command, prompt: Text("命令，如 npm run dev"))
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                            .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel("命令")
+
+                        // 名字或命令空着的是「还没填完」的草稿，不会出现在菜单里。
+                        // 这里说清楚，免得用户以为菜单坏了。
+                        if action.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || action.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("填完名字和命令后才会出现在菜单里。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if action.command.count > CustomActionStore.maxCommandLength {
+                            Label("命令过长（上限 \(CustomActionStore.maxCommandLength) 字符），不会出现在菜单里。",
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                Button("添加动作") {
+                    actions.append(CustomAction(name: "新动作", command: ""))
+                }
+
+                Text("命令由你自己的终端执行，本 App 不会代跑，所以不需要额外授权；能执行什么完全由你在终端里的权限决定。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -500,26 +623,52 @@ struct SettingsView: View {
         NSWorkspace.shared.open(url)
     }
 
-    // MARK: - 创建文件：类型列表
+    // MARK: - 列表写回（创建文件 / 编辑器共用）
 
-    /// 防抖写回。写回前先和 `lastSyncedTemplatesJSON` 比对，值没实际变化就不写。
+    /// 归一化 + 编码成存进 UserDefaults 的 JSON。
     ///
-    /// 这个比对不是性能优化，是必需的：`onAppear` 装载默认列表也会触发 `onChange`，
-    /// 不拦住的话「只是打开了一下设置页」就会把当前默认列表固化进 UserDefaults，
-    /// 以后版本新增的默认类型对老用户就再也看不到了。
-    private func scheduleSaveTemplates(_ newValue: [FileTemplate]) {
-        let json = FileTemplateStore.encode(newValue.map { FileTemplateStore.normalize($0) })
-        guard json != lastSyncedTemplatesJSON else { return }
+    /// 装填 `lastSyncedXxxJSON` 与写回**必须都走这个函数**。两侧口径不一致的话哨兵比对
+    /// 会永远判成「变了」，一打开设置页就把当前值写回 UserDefaults。
+    private func encodedList<Item: Codable>(_ items: [Item],
+                                            _ normalize: ([Item]) -> [Item]) -> String {
+        // 编码失败返回空串，让读取端退回默认值，而不是在 UserDefaults 里留半截 JSON。
+        guard let data = try? JSONEncoder().encode(normalize(items)),
+              let json = String(data: data, encoding: .utf8)
+        else { return "" }
+        return json
+    }
 
-        templatesSaveTask?.cancel()
-        templatesSaveTask = Task {
+    /// 防抖写回：值没实际变化就返回 nil（调用方不必取消旧任务）。
+    ///
+    /// 这个比对不是性能优化，是必需的：`onAppear` 装载列表也会触发 `onChange`，
+    /// 不拦住的话「只是打开了一下设置页」就会把当前值固化进 UserDefaults，
+    /// 以后版本新增的默认项对老用户就再也看不到了。
+    ///
+    /// 返回 Task 而不是自己持有，是为了让两份列表各存各的句柄——共用的话
+    /// 编辑一份会把另一份还没落盘的改动取消掉。
+    private func debouncedWrite(json: String,
+                                lastSynced: String,
+                                commit: @escaping (String) -> Void) -> Task<Void, Never>? {
+        guard json != lastSynced else { return nil }
+        return Task {
             // 防抖：连续输入时只保留最后一次。这样不会每敲一个字符就写一次
             // UserDefaults、连带菜单内容视图反复重算（`.menu` 样式下 ForEach
             // 重渲染有「追加而非替换」的已知问题，要尽量少触发）。
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            commitTemplates(json)
+            commit(json)
         }
+    }
+
+    // MARK: - 创建文件：类型列表
+
+    private func scheduleSaveTemplates(_ newValue: [FileTemplate]) {
+        let json = encodedList(newValue) { $0.map { FileTemplateStore.normalize($0) } }
+        guard let task = debouncedWrite(json: json,
+                                        lastSynced: lastSyncedTemplatesJSON,
+                                        commit: commitTemplates) else { return }
+        templatesSaveTask?.cancel()
+        templatesSaveTask = task
     }
 
     /// 立即写回。关闭设置窗口时兜底，避免丢掉最后 400ms 内的输入。
@@ -527,7 +676,7 @@ struct SettingsView: View {
         templatesSaveTask?.cancel()
         templatesSaveTask = nil
 
-        let json = FileTemplateStore.encode(templates.map { FileTemplateStore.normalize($0) })
+        let json = encodedList(templates) { $0.map { FileTemplateStore.normalize($0) } }
         guard json != lastSyncedTemplatesJSON else { return }
         commitTemplates(json)
     }
@@ -551,9 +700,145 @@ struct SettingsView: View {
         templates.removeAll { $0.id == id }
     }
 
+    // MARK: - 编辑器：列表
+
+    private func scheduleSaveEditors(_ newValue: [EditorEntry]) {
+        let json = encodedList(newValue) { $0 }
+        guard let task = debouncedWrite(json: json,
+                                        lastSynced: lastSyncedEditorsJSON,
+                                        commit: commitEditors) else { return }
+        editorsSaveTask?.cancel()
+        editorsSaveTask = task
+    }
+
+    /// 立即写回。关闭设置窗口时兜底。
+    private func saveEditorsNow() {
+        editorsSaveTask?.cancel()
+        editorsSaveTask = nil
+
+        let json = encodedList(editors) { $0 }
+        guard json != lastSyncedEditorsJSON else { return }
+        commitEditors(json)
+    }
+
+    private func commitEditors(_ json: String) {
+        lastSyncedEditorsJSON = json
+        editorsJSON = json
+    }
+
+    /// 上移 / 下移，同 `moveTemplate`。
+    private func moveEditor(id: UUID, by offset: Int) {
+        guard let index = editors.firstIndex(where: { $0.id == id }) else { return }
+        let target = index + offset
+        guard editors.indices.contains(target) else { return }
+        editors.swapAt(index, target)
+    }
+
+    /// 删除，同 `removeTemplate`。
+    private func removeEditor(id: UUID) {
+        editors.removeAll { $0.id == id }
+    }
+
+    /// 添加一个内置编辑器。已经在列表里就不重复加，而是把它打开——重复项会在菜单里
+    /// 出现两个一模一样的条目，用户很难意识到那是自己点重了。
+    private func addEditor(_ kind: EditorKind) {
+        if let existing = editors.first(where: { $0.kind == kind }) {
+            if let index = editors.firstIndex(where: { $0.id == existing.id }) {
+                editors[index].enabled = true
+            }
+            return
+        }
+        editors.append(EditorEntry(kind: kind, name: kind.displayName()))
+    }
+
+    // MARK: - 自定义动作：列表
+
+    private func scheduleSaveActions(_ newValue: [CustomAction]) {
+        let json = encodedList(newValue) { $0 }
+        guard let task = debouncedWrite(json: json,
+                                        lastSynced: lastSyncedActionsJSON,
+                                        commit: commitActions) else { return }
+        actionsSaveTask?.cancel()
+        actionsSaveTask = task
+    }
+
+    /// 立即写回。关闭设置窗口时兜底。
+    private func saveActionsNow() {
+        actionsSaveTask?.cancel()
+        actionsSaveTask = nil
+
+        let json = encodedList(actions) { $0 }
+        guard json != lastSyncedActionsJSON else { return }
+        commitActions(json)
+    }
+
+    private func commitActions(_ json: String) {
+        lastSyncedActionsJSON = json
+        customActionsJSON = json
+    }
+
+    /// 上移 / 下移，同 `moveTemplate`。
+    private func moveAction(id: UUID, by offset: Int) {
+        guard let index = actions.firstIndex(where: { $0.id == id }) else { return }
+        let target = index + offset
+        guard actions.indices.contains(target) else { return }
+        actions.swapAt(index, target)
+    }
+
+    /// 删除，同 `removeTemplate`。
+    private func removeAction(id: UUID) {
+        actions.removeAll { $0.id == id }
+    }
+
+    /// 行尾的「上移 / 下移 / 删除」按钮组。三份列表共用，
+    /// 免得各处的图标、样式、可点区域各写各的慢慢走样。
+    ///
+    /// `.borderless` 是完全无边框的裸图标，看不出能点；`.bordered` + `.circle`
+    /// 才有明显的可点外观。
+    @ViewBuilder
+    private func rowButtons(isFirst: Bool,
+                            isLast: Bool,
+                            move: @escaping (Int) -> Void,
+                            remove: @escaping () -> Void) -> some View {
+        // 按钮组整体右对齐，各行位置一致。
+        HStack(spacing: 4) {
+            Button { move(-1) } label: {
+                Image(systemName: "arrow.up").frame(width: 12, height: 12)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
+            .disabled(isFirst)
+            .help("上移")
+            .accessibilityLabel("上移")
+
+            Button { move(1) } label: {
+                Image(systemName: "arrow.down").frame(width: 12, height: 12)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
+            .disabled(isLast)
+            .help("下移")
+            .accessibilityLabel("下移")
+
+            Button(action: remove) {
+                Image(systemName: "trash").frame(width: 12, height: 12)
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
+            .help("删除")
+            .accessibilityLabel("删除")
+        }
+    }
+
     // MARK: - 开机自启
 
     /// 注册 / 注销登录项。需要 App 位于 /Applications 且签名有效。
+    ///
+    /// 失败时把开关拨回系统里的真实状态。之前只 print 一句，Release 构建里那行输出
+    /// 根本看不到，用户看到的是「开关明明打开了，下次开机却没启动」——比开关自己弹回来更费解。
     private func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
@@ -563,6 +848,7 @@ struct SettingsView: View {
             }
         } catch {
             print("[LXFinderLauncher] 设置开机自启失败：\(error)")
+            launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 }

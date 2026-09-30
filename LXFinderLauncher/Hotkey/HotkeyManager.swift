@@ -37,12 +37,19 @@ enum GlobalHotkey: UInt32, CaseIterable, Identifiable {
     case openTerminal = 1
     case createFile = 2
 
+    /// 追加在末尾而不是插在中间：`allCases` 的顺序就是撞车时的优先级
+    /// （见 `HotkeyManager.applySettings`），插到前面会改变现有两个热键的归属。
+    case openEditor = 3
+    case copyPath = 4
+
     var id: UInt32 { rawValue }
 
     var title: String {
         switch self {
         case .openTerminal: return "打开终端"
         case .createFile: return "创建文件"
+        case .openEditor: return "用编辑器打开"
+        case .copyPath: return "复制当前目录路径"
         }
     }
 
@@ -54,6 +61,8 @@ enum GlobalHotkey: UInt32, CaseIterable, Identifiable {
         switch self {
         case .openTerminal: return "hotkey"
         case .createFile: return "createFileHotkey"
+        case .openEditor: return "openEditorHotkey"
+        case .copyPath: return "copyPathHotkey"
         }
     }
 
@@ -62,6 +71,8 @@ enum GlobalHotkey: UInt32, CaseIterable, Identifiable {
         switch self {
         case .openTerminal: return kVK_ANSI_T
         case .createFile: return kVK_ANSI_N
+        case .openEditor: return kVK_ANSI_E
+        case .copyPath: return kVK_ANSI_C
         }
     }
 
@@ -69,10 +80,15 @@ enum GlobalHotkey: UInt32, CaseIterable, Identifiable {
     /// 而 Finder 恰好是这个功能唯一的使用场景——绑上去要么让用户从此用不了 Finder 的
     /// 新建智能文件夹，要么在 Finder 前台时热键不触发（菜单快捷键被前台 App 先消费），
     /// 两边都不划算。三修饰键组合也基本没有 App 会占用。
+    ///
+    /// 后加的「用编辑器打开」「复制路径」沿用同一套 ⌃⌥⌘ + 字母，理由相同：
+    /// 这两个动作同样只在 Finder 前台时才有人按，两修饰键的组合很容易撞上 Finder 自己的菜单快捷键。
     var defaultModifiers: Int {
         switch self {
         case .openTerminal: return cmdKey | shiftKey
         case .createFile: return controlKey | optionKey | cmdKey
+        case .openEditor: return controlKey | optionKey | cmdKey
+        case .copyPath: return controlKey | optionKey | cmdKey
         }
     }
 

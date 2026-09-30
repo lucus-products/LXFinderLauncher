@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch hotkey {
             case .openTerminal: AppCommands.shared.openTerminalHere()
             case .createFile:   AppCommands.shared.createFileQuickly()
+            case .openEditor:   AppCommands.shared.openInEditorFirst()
+            case .copyPath:     AppCommands.shared.copyCurrentPath()
             }
         }
         // 按 UserDefaults 配置注册全部热键。
@@ -63,11 +65,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.messageText = "欢迎使用 LXFinderLauncher"
             alert.informativeText = """
             在 Finder 当前目录打开终端或新建文件：
-            · 点菜单栏 terminal 图标，或按全局快捷键（打开终端默认 ⌘⇧T、创建文件默认 ⌃⌥⌘N）
+            · 点菜单栏 terminal 图标，或按全局快捷键
+              （打开终端 ⌘⇧T、创建文件 ⌃⌥⌘N、编辑器 ⌃⌥⌘E、复制路径 ⌃⌥⌘C，均可在设置中改）
             · 首次使用会请求「控制 Finder」的授权，点允许即可。
 
             设置里可切换终端（Terminal / iTerm2 / 自定义）、
-            配置用 Cursor 等编辑器打开、增删「创建文件」的类型、开启开机自启。
+            配置用哪些编辑器打开（可同时启用多个）、增删「创建文件」的类型、
+            配置一键执行命令的「自定义动作」、开启开机自启。
             """
             alert.addButton(withTitle: "开始使用")
             alert.runModal()

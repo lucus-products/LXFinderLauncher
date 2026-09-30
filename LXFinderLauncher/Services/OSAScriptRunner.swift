@@ -22,7 +22,9 @@ enum OSAScriptError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .tccDenied:
-            return "没有自动化授权。请在「系统设置 → 隐私与安全性 → 自动化」中允许本 App 控制对应应用。"
+            // 说清具体是哪些 App：这条文案在执行「打开终端」「自定义动作」时也会出现，
+            // 光说「对应应用」用户不知道该去自动化列表里勾哪一个。
+            return "没有自动化授权。请在「系统设置 → 隐私与安全性 → 自动化」中允许本 App 控制 Finder 和你使用的终端，然后重试。"
         case .timeoutOrBusy:
             return "目标应用没有响应，请稍后重试。"
         case .unknown(let code, let message):
@@ -45,7 +47,11 @@ enum OSAScriptRunner {
     static func run(_ script: String, arguments: [String] = []) throws -> String {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", script] + arguments
+        // `--` 是必需的：osascript 用自己的 getopt 解析命令行，参数以 `-` 开头时会被当成它自己的
+        // 选项而直接失败（实测 `osascript -e … -foo` → "illegal option -- f"）。
+        // 现有调用方传的都是绝对路径（以 `/` 开头）所以没暴露过，但「自定义动作」的命令
+        // 完全可能是 `--help` / `-la` 这种。`--` 本身不占 argv 位置，脚本里 item 1 仍是第一个参数。
+        task.arguments = ["-e", script, "--"] + arguments
 
         let outPipe = Pipe()
         let errPipe = Pipe()

@@ -5,7 +5,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>LXFinderLauncher 需要读取当前 Finder 窗口的目录，以便在对应位置打开终端。</string>
+	<string>LXFinderLauncher 需要读取当前 Finder 窗口的目录，以便在对应位置打开终端；以及在 Terminal / iTerm2 中执行你配置的自定义动作。</string>
 	<!--
 	  「创建文件」是本 App 自己直接写盘（现有功能都是让 Finder / 终端代劳，不碰这几项授权）。
 	  桌面、文稿、下载三个目录受 TCC 保护，缺了对应的用途说明会被系统直接拒绝而不是弹窗征询。

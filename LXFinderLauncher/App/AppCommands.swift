@@ -20,12 +20,29 @@ final class AppCommands {
 
     private init() {}
 
+    /// 设置里的「打开位置」：0 = 新窗口，1 = 新标签页。
+    private var terminalMode: TerminalOpenMode {
+        UserDefaults.standard.integer(forKey: "terminalOpenMode") == 1 ? .newTab : .newWindow
+    }
+
     /// 在当前 Finder 目录打开终端（按设置的终端与打开位置）。
     func openTerminalHere() {
         do {
             let url = try FinderPathProvider.currentDirectory()
-            let mode: TerminalOpenMode = UserDefaults.standard.integer(forKey: "terminalOpenMode") == 1 ? .newTab : .newWindow
-            launcher.openTerminal(at: url, mode: mode)
+            try launcher.openTerminal(at: url, mode: terminalMode)
+        } catch {
+            presentError(error)
+        }
+    }
+
+    /// 执行一条自定义动作：在 Finder 当前目录的终端里跑它配置的命令。
+    ///
+    /// App 自己不执行任何命令——命令是送进用户配置的终端、由他的 shell 跑的。
+    /// 终端跟随「打开位置」设置，与「打开终端」保持一致，免得同一个 App 里有两套位置语义。
+    func runAction(_ action: CustomAction) {
+        do {
+            let url = try FinderPathProvider.currentDirectory()
+            try launcher.run(action.command, at: url, mode: terminalMode)
         } catch {
             presentError(error)
         }
@@ -101,15 +118,39 @@ final class AppCommands {
         UserDefaults.standard.set(ext, forKey: FileTemplateStore.lastUsedExtKey)
     }
 
-    /// 用配置的编辑器打开当前 Finder 目录。
-    func openInEditor() {
-        guard let opener = EditorOpenerFactory.make() else { return }
+    /// 用指定编辑器打开当前 Finder 目录。
+    func openInEditor(_ entry: EditorEntry) {
         do {
+            let opener = try EditorOpenerFactory.resolve(entry)
             let url = try FinderPathProvider.currentDirectory()
             opener.openEditor(at: url)
         } catch {
             presentError(error)
         }
+    }
+
+    /// 全局热键：用编辑器列表里**第一个**启用的打开当前 Finder 目录。
+    ///
+    /// 与菜单路径的唯一区别是「没配编辑器时必须出声」：热键没有任何可见入口，
+    /// 静默 return 的话用户只会以为热键坏了、而不是以为该去配置
+    /// （同 createFileQuickly 里 no-template 那条分支的处理）。
+    func openInEditorFirst() {
+        guard let first = Self.enabledEditors().first else {
+            presentMessage("还没有启用任何编辑器。请先在「设置 → 编辑器」里添加一个。")
+            return
+        }
+        openInEditor(first)
+    }
+
+    /// 当前启用的编辑器列表。
+    ///
+    /// 热键路径没有菜单那样的 SwiftUI 观察环境，只能静态读 UserDefaults；
+    /// 好在热键每次触发都读一次，拿到的就是最新配置。
+    static func enabledEditors() -> [EditorEntry] {
+        EditorStore.menuEditors(
+            from: UserDefaults.standard.string(forKey: EditorStore.defaultsKey) ?? "",
+            legacyKind: UserDefaults.standard.integer(forKey: EditorStore.legacyKindKey),
+            legacyPath: UserDefaults.standard.string(forKey: EditorStore.legacyPathKey) ?? "")
     }
 
     /// 检查更新。silent = true 时（启动自动检查）失败静默、无新版本不打扰。
@@ -189,10 +230,15 @@ final class AppCommands {
     }
 
     /// 授权类错误对应系统设置里的哪个面板；不是授权问题则返回 nil。
-    private static func privacySettingsURL(for error: Error) -> URL? {
+    ///
+    /// 非 private 是为了能单测：漏掉一个分支的后果是用户只看到「没有授权」却拿不到
+    /// 直达设置的按钮——而这正是「点了没反应」最需要被修好的地方。
+    static func privacySettingsURL(for error: Error) -> URL? {
         let pane: String
         if case FinderPathError.tccDenied = error {
             pane = "Privacy_Automation"          // 控制 Finder：读当前目录
+        } else if case OSAScriptError.tccDenied = error {
+            pane = "Privacy_Automation"          // 控制 Finder / 终端：自动化授权被拒
         } else if case FileCreationError.noPermission = error {
             pane = "Privacy_FilesAndFolders"     // 写桌面 / 文稿 / 下载
         } else {
