@@ -1,22 +1,24 @@
-# LXFinderLauncher
+<div align="center">
+  <img src="docs/logo.png" width="128" alt="LXFinderLauncher 图标">
+  <h1>LXFinderLauncher</h1>
+</div>
+
+macOS 菜单栏工具：**在 Finder 当前窗口所在的目录，一键打开终端、编辑器，或执行你预设的命令**。灵感来自 [Go2Shell](https://itunes.apple.com/cn/app/go2shell/id445770608)，用 SwiftUI + AppKit 从零实现——不需要在 Finder 里选中任何文件，点菜单栏图标或按全局快捷键就行。
+
+```
+Finder 正在浏览 /Users/me/Projects/foo
+        │  点菜单栏图标，或按全局快捷键 ⌘⇧T
+        ▼
+Terminal / iTerm2 / 自定义终端 在该目录打开（新窗口或新标签页）
+Cursor / VSCode / 自定义编辑器 一键打开该目录
+自定义动作（npm run dev、git pull…）在该目录的终端里执行
+```
 
 ## 下载
 
 [⬇️ 下载最新版（v1.2.0）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
-
-macOS 菜单栏工具：**在 Finder 当前窗口所在的目录，一键打开终端或编辑器**。灵感来自 [Go2Shell](https://itunes.apple.com/cn/app/go2shell/id445770608)，用 SwiftUI + AppKit 从零实现。
-
-```
-Finder 正在浏览 /Users/me/Projects/foo
-        │  点菜单栏 terminal 图标 或 按 ⌘⇧T
-        ▼
-Terminal / iTerm2 / 自定义终端 在该目录打开（新窗口或新标签页）
-Cursor / VSCode 一键打开该目录
-```
-
-与仓库里的 [Lucus-Finder](../Lucus-Finder/README.md) 互补：Lucus-Finder 走 Finder 右键「服务」菜单（需选中文件/文件夹）；本工具走**菜单栏 + 全局快捷键**（不选中任何东西，随时取当前窗口目录）。
 
 ---
 
@@ -182,6 +184,10 @@ LXFinderLauncher/
 > 关键技术：读取 Finder 当前目录用 **osascript 子进程**（`/usr/bin/osascript`）而非 `NSAppleScript`——
 > 菜单栏 App 直接发 Apple Events 会被 TCC 静默拒绝（返回 `-1743`），子进程方式才能正常弹出授权框并拿到目录。
 > 详见上文「技术要点」。
+
+## 相关
+
+姊妹工具 **Lucus-Finder** 走 Finder 右键「服务」菜单，需要先在 Finder 里选中文件或文件夹；本工具走**菜单栏 + 全局快捷键**，不选中任何东西也能随时取当前窗口目录。
 
 ---
 
