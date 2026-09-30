@@ -113,8 +113,3 @@ tccutil reset AppleEvents com.linx.LXFinderLauncher
 - **首次启动引导**：弹窗说明用法与授权。
 - **检查更新**：`URLSession` 请求静态 JSON（版本号 + 下载地址），免费分发无需签名即可自更新。
 - 独立工程：复制改造 Lucus-Finder 的 `project.pbxproj`（同步组结构 + `GENERATE_INFOPLIST_FILE` 合并自定义 `Info.plist`）。
-
-> 关键技术：读取 Finder 当前目录用 **osascript 子进程**（`/usr/bin/osascript`）而非 `NSAppleScript`——
-> 菜单栏 App 直接发 Apple Events 会被 TCC 静默拒绝（返回 `-1743`），子进程方式才能正常弹出授权框并拿到目录。
-> 详见 [README_dev.md](README_dev.md) 的「技术要点」。
-
