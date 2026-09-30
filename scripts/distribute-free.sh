@@ -65,7 +65,35 @@ mkdir -p "$DIST"
 cp -R "$APP_SRC" "$DIST/LXFinderLauncher.app"
 
 # ------------------------------------------------------------
-# 3) 打包 zip 与 dmg
+# 3) 签名校验闸门（发版前必过）
+#    为什么需要：App 靠「自动化」授权读 Finder 当前目录，而 TCC 的授权记录是
+#    按代码签名要求匹配的。签名一旦校验不过（最常见是证书被吊销），
+#    TCC 就匹配不上任何记录 —— 用户每次点开终端/编辑器/创建文件都会重新弹窗，
+#    系统设置里的开关也永远不生效。
+#
+#    Xcode 自动签名会在换证时吊销旧证书，而吊销后本机构建照常成功、
+#    不报任何错 —— 只有校验签名才知道。1.1.7 就是这么发出去的。
+# ------------------------------------------------------------
+echo "🔏 校验签名 ..."
+SIGN_ERROR="$(codesign --verify --deep --strict --verbose=2 "$DIST/LXFinderLauncher.app" 2>&1)" || {
+    echo "❌ 签名校验失败，已中止打包："
+    echo "$SIGN_ERROR" | sed 's/^/    /'
+    echo ""
+    if echo "$SIGN_ERROR" | grep -q "CSSMERR_TP_CERT_REVOKED"; then
+        echo "原因：签名用的开发证书已被吊销。"
+        echo "处理：Xcode → Settings → Accounts → Manage Certificates，"
+        echo "      删掉吊销/过期的 Apple Development 证书，重新签一张，再跑本脚本。"
+    fi
+    exit 1
+}
+
+# 打印实际使用的证书，方便发版时肉眼核对是不是那张对的。
+SIGN_CERT="$(codesign -dvvv "$DIST/LXFinderLauncher.app" 2>&1 \
+             | grep -m1 '^Authority=' | cut -d= -f2- || echo '（自签名 / 未签名）')"
+echo "    ✅ 签名有效：$SIGN_CERT"
+
+# ------------------------------------------------------------
+# 4) 打包 zip 与 dmg
 #    ditto 是 macOS 官方打 zip 的方式（保留符号链接与权限）。
 #    hdiutil 制作只读压缩 dmg（UDZO）。
 # ------------------------------------------------------------
@@ -75,7 +103,7 @@ hdiutil create -volname LXFinderLauncher -srcfolder "$DIST/LXFinderLauncher.app"
                -ov -format UDZO "$DIST/LXFinderLauncher.dmg" >/dev/null
 
 # ------------------------------------------------------------
-# 4) 完成提示
+# 5) 完成提示
 # ------------------------------------------------------------
 echo ""
 echo "✅ 完成！产物目录：$DIST"

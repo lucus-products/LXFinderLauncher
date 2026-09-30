@@ -2,7 +2,7 @@
 
 ## 下载
 
-[⬇️ 下载最新版（v1.1.7）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
+[⬇️ 下载最新版（v1.1.8）](https://github.com/lucus-products/LXFinderLauncher/releases/latest/download/LXFinderLauncher.zip)
 
 > 免费分发版未签名 Developer ID，首次运行请右键 App → **打开**（多一次确认），或用 `xattr -dr com.apple.quarantine` 解除隔离。
 
@@ -120,6 +120,10 @@ LXFinderLauncher/
 ---
 
 ## 变更历史
+
+### V1.1.8 · 修复权限反复弹窗
+- **重要修复**：v1.1.7 的签名证书被吊销，导致「打开终端 / 用编辑器打开 / 创建文件」每次都重新弹授权框，系统设置里的「自动化」开关也永远不生效。原因是 TCC 授权按代码签名匹配，签名校验不过就匹配不上任何记录。本版用有效证书重新签名。
+- `scripts/distribute-free.sh` 新增**签名校验闸门**：打包后强制校验签名，被吊销/失效的证书签名会直接中止发布，杜绝同类问题再次流出。
 
 ### V1.1.7 · 创建文件
 - 新增「创建文件」功能：菜单栏二级菜单就地新建文件（md / txt / docx / xlsx / pptx / json / yml / html），类型与顺序可在设置中配置，也能新增自定义格式。docx / xlsx / pptx 内置最小可用的空白模板，创建出来可直接双击打开。

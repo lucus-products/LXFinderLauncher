@@ -63,6 +63,12 @@ open dist-build/Build/Products/Debug/LXFinderLauncher.app
 
 **默认 Release 的原因**：Debug 产物含 `debug.dylib`，发到别人机器上不稳定；Release 会合并成单一二进制。
 
+**签名校验闸门（发版前必过）**：脚本在打包前会跑 `codesign --verify --deep --strict`，校验不过直接中止，不产出任何产物。
+
+为什么必须有这一步：App 靠「自动化」授权读 Finder 当前目录，而 **TCC 的授权记录是按代码签名要求匹配的**。签名一旦校验不过（最常见是证书被吊销），TCC 就匹配不上任何记录——用户每次点开终端 / 编辑器 / 创建文件都会重新弹授权框，系统设置里的开关也永远不生效。而 Xcode 自动签名在换证时会吊销旧证书，**吊销后本机构建照常成功、不报任何错**，只有校验签名才看得出来。v1.1.7 就是这么发出去的。
+
+报 `CSSMERR_TP_CERT_REVOKED` 时：Xcode → Settings → Accounts → Manage Certificates，删掉吊销/过期的 Apple Development 证书，重新签一张，再跑脚本。脚本每次也会打印实际使用的证书名，方便肉眼核对。
+
 **分发限制**：没有 Developer ID 签名，别人首次运行会被 Gatekeeper 拦截。对方需要：
 
 - 右键 App → **打开**（多一次确认），或
