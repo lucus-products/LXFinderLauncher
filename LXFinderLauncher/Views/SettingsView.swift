@@ -451,10 +451,10 @@ struct SettingsView: View {
 
                 Menu("添加编辑器") {
                     if isCursorInstalled {
-                        Button("Cursor") { addEditor(.cursor) }
+                        builtInEditorMenuItem(.cursor)
                     }
                     if isVSCodeInstalled {
-                        Button("Visual Studio Code") { addEditor(.vscode) }
+                        builtInEditorMenuItem(.vscode)
                     }
                     Button("自定义…") { addEditor(.custom) }
                 }
@@ -739,16 +739,30 @@ struct SettingsView: View {
         editors.removeAll { $0.id == id }
     }
 
-    /// 添加一个内置编辑器。已经在列表里就不重复加，而是把它打开——重复项会在菜单里
-    /// 出现两个一模一样的条目，用户很难意识到那是自己点重了。
+    /// 添加一个编辑器。内置编辑器按种类去重（重复添加只是把它启用），
+    /// 自定义编辑器则允许添加多个——具体规则见 `EditorStore.adding(_:to:)`。
     private func addEditor(_ kind: EditorKind) {
-        if let existing = editors.first(where: { $0.kind == kind }) {
-            if let index = editors.firstIndex(where: { $0.id == existing.id }) {
-                editors[index].enabled = true
-            }
-            return
-        }
-        editors.append(EditorEntry(kind: kind, name: kind.displayName()))
+        editors = EditorStore.adding(kind, to: editors)
+    }
+
+    /// 「添加编辑器」菜单里的内置编辑器项。
+    ///
+    /// 已经在列表里就直接标出来，而不是让用户点完才疑惑「怎么没多一条」：
+    /// 已启用的禁用（再点也没有任何效果），已存在但没启用的仍可点——那一下会把它启用。
+    /// 这比点完再弹一个「已添加」更早、也更安静：用户在下手之前就能看到状态。
+    @ViewBuilder
+    private func builtInEditorMenuItem(_ kind: EditorKind) -> some View {
+        let existing = editors.first { $0.kind == kind }
+        Button(addEditorTitle(kind, existing: existing)) { addEditor(kind) }
+            .disabled(existing?.enabled == true)
+    }
+
+    /// 已经在列表里的内置编辑器，在菜单标题里写清楚当前状态。
+    private func addEditorTitle(_ kind: EditorKind, existing: EditorEntry?) -> String {
+        guard let existing else { return kind.displayName() }
+        return existing.enabled
+            ? "\(kind.displayName())（已添加）"
+            : "\(kind.displayName())（已添加，未启用）"
     }
 
     // MARK: - 自定义动作：列表

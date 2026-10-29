@@ -447,6 +447,25 @@ struct EditorStoreTests {
         #expect(!EditorStore.isConfigured(EditorEntry(kind: .custom, name: "x", path: "")))
     }
 
+    @Test func addingBuiltInEditorReusesExistingEntry() {
+        // 内置编辑器同一份 App 只该有一条：重复添加只把它启用，id 保持不变。
+        let existing = EditorEntry(kind: .cursor, name: "Cursor", enabled: false)
+        let result = EditorStore.adding(.cursor, to: [existing])
+        #expect(result.count == 1)
+        #expect(result.first?.id == existing.id)
+        #expect(result.first?.enabled == true)
+    }
+
+    @Test func addingCustomEditorAllowsMultiple() {
+        // 自定义编辑器代表的是「用户自己填的 App」，不是某一种固定 App：
+        // 可以同时配 Nova、Sublime Text…，不能按 kind 去重。
+        var list = EditorStore.adding(.custom, to: [])
+        list = EditorStore.adding(.custom, to: list)
+        #expect(list.count == 2)
+        #expect(list.allSatisfy { $0.kind == .custom })
+        #expect(list[0].id != list[1].id)
+    }
+
     @Test func decodesEntryWithMissingFields() {
         // 手改 UserDefaults、或以后给 EditorEntry 加字段时，单条残缺不该让整份配置解码失败。
         let list = EditorStore.editors(from: #"[{"kind": 1}]"#, legacyKind: 0, legacyPath: "")

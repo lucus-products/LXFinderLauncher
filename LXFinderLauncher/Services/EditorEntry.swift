@@ -164,6 +164,25 @@ enum EditorStore {
         return !entry.path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// 往列表里添加一个编辑器。
+    ///
+    /// 内置编辑器（Cursor / VSCode）同一份 App 只该有一条配置：重复添加只会在菜单里
+    /// 出现两个一模一样、点了效果也相同的条目，所以已经在列表里就改为把它启用。
+    /// **自定义编辑器必须允许重复**——用户可能同时用 Nova、Sublime Text 等好几个 App，
+    /// 若也按 kind 去重，「添加第二个」就变成了「打开第一个」，等于只能配一个。
+    static func adding(_ kind: EditorKind, to editors: [EditorEntry]) -> [EditorEntry] {
+        var result = editors
+
+        if kind != .custom,
+           let index = result.firstIndex(where: { $0.kind == kind }) {
+            result[index].enabled = true
+            return result
+        }
+
+        result.append(EditorEntry(kind: kind, name: kind.displayName()))
+        return result
+    }
+
     /// 由旧的单选配置派生列表。`kind` 解不出（0=关闭）或自定义却没填路径，都视为「没配」。
     private static func derived(fromLegacyKind kind: Int, path: String) -> [EditorEntry] {
         guard let legacy = EditorKind(rawValue: kind) else { return [] }
